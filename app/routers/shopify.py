@@ -13,7 +13,8 @@ from fastapi import APIRouter, Request, HTTPException
 from app.config import settings
 from app.utils.security import verify_webhook_signature
 from app.utils.logging import get_logger
-from app.routers.books import get_book_storage
+from app.services.database import get_database
+from app.services.print_service import get_print_service
 
 logger = get_logger(__name__)
 
@@ -22,27 +23,28 @@ router = APIRouter(prefix="/api/shopify", tags=["Shopify"])
 
 def extract_book_id_from_order(order: dict) -> Optional[str]:
     """
-    Extract book_id from order notes or line item properties.
+    Extract book_id (story_id) from order notes or line item properties.
     
     Shopify orders can contain book_id in:
-    1. Order notes: "book_id:abc123"
+    1. Order notes: "book_id:abc123" or "story_id:abc123"
     2. Line item properties: {"name": "book_id", "value": "abc123"}
+    3. Note attributes
     """
     # Check order notes
     if order.get('note'):
         for line in order['note'].split('\n'):
-            if line.startswith('book_id:'):
+            if line.startswith('book_id:') or line.startswith('story_id:'):
                 return line.split(':')[1].strip()
     
     # Check line item properties
     for item in order.get('line_items', []):
         for prop in item.get('properties', []):
-            if prop.get('name') == 'book_id':
+            if prop.get('name') in ('book_id', 'story_id'):
                 return prop.get('value')
     
     # Check note_attributes
     for attr in order.get('note_attributes', []):
-        if attr.get('name') == 'book_id':
+        if attr.get('name') in ('book_id', 'story_id'):
             return attr.get('value')
     
     return None
@@ -91,20 +93,20 @@ async def handle_order_created(request: Request):
     order_id = order.get('id')
     logger.info(f"Received Shopify order webhook: {order_id}")
     
-    # Extract book_id from order
-    book_id = extract_book_id_from_order(order)
+    # Extract book_id (story_id) from order
+    story_id = extract_book_id_from_order(order)
     
-    if not book_id:
-        logger.info(f"Order {order_id} has no book_id, skipping")
+    if not story_id:
+        logger.info(f"Order {order_id} has no book_id/story_id, skipping")
         return {"status": "skipped", "reason": "no book_id found"}
     
-    # Get book data
-    book_storage = get_book_storage()
-    book = book_storage.get(book_id)
+    # Get book data from Supabase
+    db = get_database()
+    book = await db.get_full_book(story_id)
     
     if not book:
-        logger.error(f"Book {book_id} not found for order {order_id}")
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+        logger.error(f"Story {story_id} not found for order {order_id}")
+        raise HTTPException(status_code=404, detail=f"Story {story_id} not found")
     
     # Determine format from line items
     format_type = 'hardcover'
@@ -112,17 +114,27 @@ async def handle_order_created(request: Request):
         format_type = determine_format_from_item(item)
         break
     
-    logger.info(f"Processing order {order_id} for book {book_id}, format: {format_type}")
+    logger.info(f"Processing order {order_id} for story {story_id}, format: {format_type}")
     
-    # TODO: Start print production or digital delivery
-    # This would trigger the PrintProductionPipeline for physical books
-    # or generate and email a PDF for digital orders
+    # Extract shipping address
+    shipping_address = order.get('shipping_address', {})
+    
+    # Start print production
+    print_service = get_print_service()
+    job = await print_service.start_print_production(
+        order_id=str(order_id),
+        book_data=book,
+        format=format_type,
+        book_size="square_8x8",  # Default to 8x8 for now
+        shipping_address=shipping_address
+    )
     
     return {
         "status": "processing",
         "order_id": str(order_id),
-        "book_id": book_id,
-        "format": format_type
+        "story_id": story_id,
+        "format": format_type,
+        "job_id": job.job_id
     }
 
 

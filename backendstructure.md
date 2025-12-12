@@ -23,13 +23,14 @@ Taleom/
 │   │   ├── __init__.py
 │   │   ├── story_generator.py  # Gemini AI story generation
 │   │   ├── image_generator.py  # Fal.ai image generation
-│   │   └── character_service.py # Character profile management
+│   │   ├── character_service.py # Character profile management
+│   │   ├── print_service.py    # Print production & Lulu integration
+│   │   └── database.py         # Supabase database operations
 │   └── utils/
 │       ├── __init__.py
 │       ├── logging.py          # Logging configuration
 │       └── security.py         # Webhook verification, sanitization
 ├── character_system.py         # Character enums, models, bible generator
-├── print_production.py         # Print-quality PDF generation (Lulu/Printful)
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py             # Pytest fixtures
@@ -233,16 +234,64 @@ class CharacterDescriptionGenerator:
 
 ---
 
-### 10. `print_production.py` - Print Pipeline
+### 10. `app/services/print_service.py` - Print Service
 
-Converts preview images to print-ready output after payment.
+Orchestrates the entire print production pipeline.
 
 **Classes:**
-- `PrintConfig` - Book sizes, bleed, DPI settings
-- `PrintImageGenerator` - High-res image generation
-- `PrintImageProcessor` - CMYK conversion, resolution
-- `PrintPDFGenerator` - PDF with bleed margins
-- `PrintProductionPipeline` - Orchestrates the full process
+- `PrintService` - Main orchestrator, manages jobs and Lulu integration
+- `PrintConfig` - Book sizes, bleed (0.125"), DPI (300) settings
+- `PrintImageProcessor` - CMYK conversion, resolution checking, TIFF export
+- `PrintPDFGenerator` - Generates PDF with bleed margins using ReportLab
+- `PrintJob` - Tracks production status and files
+
+**Features:**
+- High-res image generation (Flux Pro)
+- CMYK color space conversion for print
+- PDF generation with proper bleed and crop marks
+- Automatic upload to Lulu for printing
+
+---
+
+### 11. `app/services/database.py` - Database Service
+
+Supabase integration for persistent data storage.
+
+**Tables:**
+
+```sql
+-- stories: Main story/book data
+CREATE TABLE stories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    child_name TEXT NOT NULL,
+    child_age INTEGER,
+    siblings TEXT,
+    favorite_characters TEXT,
+    pets TEXT,
+    parents TEXT,
+    friends TEXT,
+    theme TEXT NOT NULL,
+    photo_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- pages: Individual story pages with illustrations
+CREATE TABLE pages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    story_id UUID REFERENCES stories(id) ON DELETE CASCADE,
+    page_number INTEGER NOT NULL,
+    text_content TEXT,
+    image_prompt TEXT,
+    image_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Key Methods:**
+- `get_full_book(story_id)` - Returns complete book data for print production
+- `create_story()` / `get_story()` - CRUD for stories
+- `create_page()` / `get_pages()` - CRUD for pages
 
 ---
 
@@ -283,7 +332,9 @@ Converts preview images to print-ready output after payment.
 │       ↓                                                        │
 │  Verify HMAC Signature                                         │
 │       ↓                                                        │
-│  Extract book_id from order                                    │
+│  Extract story_id from order (note/properties)                 │
+│       ↓                                                        │
+│  DatabaseService.get_full_book(story_id) ← SUPABASE            │
 │       ↓                                                        │
 │  ┌─────────────────┬─────────────────┐                         │
 │  │    DIGITAL      │     PRINT       │                         │

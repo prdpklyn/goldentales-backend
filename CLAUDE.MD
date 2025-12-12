@@ -53,12 +53,12 @@ Taleom/
 │   ├── services/
 │   │   ├── story_generator.py  # Gemini AI story generation
 │   │   ├── image_generator.py  # Fal.ai image generation
-│   │   └── character_service.py # Character profile management
+│   │   ├── character_service.py # Character profile management
+│   │   └── print_service.py    # Print production and Lulu integration
 │   └── utils/
 │       ├── logging.py          # Logging configuration
 │       └── security.py         # Webhook verification, sanitization
 ├── character_system.py         # Character enums and bible generator
-├── print_production.py         # Print-quality PDF generation
 ├── tests/                      # Test suite
 ├── requirements.txt
 └── .env.example

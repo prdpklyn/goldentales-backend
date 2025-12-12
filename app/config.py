@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     stripe_secret_key: Optional[str] = Field(default=None, alias="STRIPE_SECRET_KEY")
     sendgrid_api_key: Optional[str] = Field(default=None, alias="SENDGRID_API_KEY")
     
+    # Supabase Database
+    supabase_url: Optional[str] = Field(default=None, alias="SUPABASE_URL")
+    supabase_key: Optional[str] = Field(default=None, alias="SUPABASE_PUBLISHABLE_KEY")
+    
     # Shopify
     shopify_store_url: Optional[str] = Field(default=None, alias="SHOPIFY_STORE_URL")
     shopify_access_token: Optional[str] = Field(default=None, alias="SHOPIFY_ACCESS_TOKEN")
