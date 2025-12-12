@@ -38,3 +38,22 @@ stripe==7.10.0
 
 # Monitoring
 sentry-sdk[fastapi]==1.39.1
+
+# Utilities
+uuid6==2024.1.12
+
+# Optional: Email notifications (for digital delivery)
+# sendgrid==6.11.0
+
+# Optional: Background tasks (recommended for production)
+# celery==5.3.6
+# redis==5.0.1
+
+# Production
+gunicorn==21.2.0
+
+# Testing
+pytest==8.0.0
+pytest-asyncio==0.23.0
+pytest-cov==4.1.0
+httpx>=0.26.0
