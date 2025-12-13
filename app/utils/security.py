@@ -1,6 +1,6 @@
 # app/utils/security.py
 """
-DreamWeaver Security Utilities
+GoldenTales Security Utilities
 ==============================
 Security functions for webhook verification, input sanitization, etc.
 """

@@ -1,6 +1,6 @@
 # app/utils/logging.py
 """
-DreamWeaver Logging
+GoldenTales Logging
 ===================
 Centralized logging configuration.
 """
@@ -57,6 +57,6 @@ def get_logger(name: str) -> logging.Logger:
 
 
 # Convenience instances for common loggers
-app_logger = get_logger("dreamweaver")
-api_logger = get_logger("dreamweaver.api")
-ai_logger = get_logger("dreamweaver.ai")
+app_logger = get_logger("goldentales")
+api_logger = get_logger("goldentales.api")
+ai_logger = get_logger("goldentales.ai")

@@ -1,4 +1,4 @@
-# DreamWeaver Utils Package
+# GoldenTales Utils Package
 from app.utils.security import verify_webhook_signature, sanitize_input
 from app.utils.logging import get_logger
 

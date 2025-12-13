@@ -1,6 +1,6 @@
 # app/services/image_generator.py
 """
-DreamWeaver Image Generator
+GoldenTales Image Generator
 ===========================
 Generates illustrations using Fal.ai with character consistency.
 """

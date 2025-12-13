@@ -1,6 +1,6 @@
 # app/services/story_generator.py
 """
-DreamWeaver Story Generator
+GoldenTales Story Generator
 ===========================
 Generates personalized children's stories using Google Gemini.
 """

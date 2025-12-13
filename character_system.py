@@ -1,6 +1,6 @@
 # character_system.py
 """
-DreamWeaver Character Consistency System
+GoldenTales Character Consistency System
 ========================================
 Ensures characters look identical across all pages by:
 1. Collecting detailed character attributes upfront

@@ -1,6 +1,6 @@
 # app/services/character_service.py
 """
-DreamWeaver Character Service
+GoldenTales Character Service
 =============================
 Manages character profiles and bible generation.
 """

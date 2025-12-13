@@ -1,6 +1,6 @@
 # app/services/database.py
 """
-DreamWeaver Database Service
+GoldenTales Database Service
 ============================
 Supabase integration for story and page management.
 """

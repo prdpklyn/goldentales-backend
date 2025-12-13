@@ -1,8 +1,8 @@
 # main.py
 """
-DreamWeaver Backend API
+GoldenTales Backend API
 =======================
-AI-powered personalized storybook generation with character consistency.
+AI-powered personalized children's storybook generation with character consistency.
 
 This is the main entry point for the FastAPI application.
 All business logic has been extracted to the app/ package for modularity.
@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup/shutdown events."""
     # Startup
-    logger.info(f"Starting DreamWeaver API v2.2.0")
+    logger.info(f"Starting GoldenTales API v3.0.0")
     logger.info(f"Environment: {settings.environment.value}")
     
     # Validate required API keys
@@ -44,14 +44,14 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    logger.info("Shutting down DreamWeaver API")
+    logger.info("Shutting down GoldenTales API")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="DreamWeaver API",
-    description="AI-powered personalized storybook generation with character consistency",
-    version="2.2.0",
+    title="GoldenTales API",
+    description="AI-powered personalized children's storybook generation with character consistency",
+    version="3.0.0",
     lifespan=lifespan
 )
 

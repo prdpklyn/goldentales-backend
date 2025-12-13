@@ -1,4 +1,4 @@
-# DreamWeaver Models Package
+# GoldenTales Models Package
 from app.models.requests import (
     CreateBookRequest,
     RegeneratePageRequest,

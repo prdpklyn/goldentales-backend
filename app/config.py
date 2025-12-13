@@ -1,6 +1,6 @@
 # app/config.py
 """
-DreamWeaver Configuration
+GoldenTales Configuration
 =========================
 Centralized configuration using pydantic-settings for validation.
 """
@@ -88,7 +88,7 @@ class Settings(BaseSettings):
     express_shipping_days: int = 4
     
     # Frontend URL (for emails, etc.)
-    frontend_url: str = "https://taleom.lovable.app"
+    frontend_url: str = "https://goldentales.app"
     
     model_config = SettingsConfigDict(
         env_file=".env",

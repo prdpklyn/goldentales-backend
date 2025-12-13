@@ -1,1 +1,1 @@
-# DreamWeaver App Package
+# GoldenTales App Package

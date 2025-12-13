@@ -1,6 +1,6 @@
 # app/models/enums.py
 """
-DreamWeaver Enums
+GoldenTales Enums
 =================
 All enums used across the application.
 """

@@ -1,6 +1,6 @@
 # app/routers/config.py
 """
-DreamWeaver Config Router
+GoldenTales Config Router
 =========================
 API endpoints for public configuration and health checks.
 """
@@ -24,14 +24,14 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["Config"])
 
 # App version
-VERSION = "2.2.0"
+VERSION = "3.0.0"
 
 
 @router.get("/")
 async def root():
     """Root endpoint / health check."""
     return {
-        "service": "DreamWeaver API",
+        "service": "GoldenTales API",
         "version": VERSION,
         "status": "healthy"
     }

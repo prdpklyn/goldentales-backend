@@ -16,7 +16,7 @@ async def test_print_job(story_id: str, use_creative: bool = False):
     """Test the print job process for a story."""
     
     print("=" * 60)
-    print("DreamWeaver Print Job Test (Upscaling Mode)")
+    print("GoldenTales Print Job Test (Upscaling Mode)")
     print("=" * 60)
     print(f"\nStory ID: {story_id}")
     
@@ -87,7 +87,7 @@ async def test_print_job(story_id: str, use_creative: bool = False):
     print(f"  Method: {method.value}")
     print(f"  Pages: {book['page_count']}")
     print(f"  Estimated cost: ~${total_cost:.2f}")
-    print(f"  Output: /tmp/dreamweaver_print/verification/")
+    print(f"  Output: /tmp/goldentales_print/verification/")
     print("=" * 60)
     
     confirm = input("\nStart print production? (yes/no): ").strip().lower()
@@ -139,7 +139,7 @@ async def test_print_job(story_id: str, use_creative: bool = False):
             if final_job.pdf_path:
                 print(f"  PDF: {final_job.pdf_path}")
                 print(f"\n📄 Check the PDF at:")
-                print(f"   /tmp/dreamweaver_print/verification/job_{final_job.job_id}.pdf")
+                print(f"   /tmp/goldentales_print/verification/job_{final_job.job_id}.pdf")
             
             if final_job.error_message:
                 print(f"  Error: {final_job.error_message}")

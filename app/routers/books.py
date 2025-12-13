@@ -1,6 +1,6 @@
 # app/routers/books.py
 """
-DreamWeaver Books Router
+GoldenTales Books Router
 ========================
 API endpoints for book creation and management.
 """

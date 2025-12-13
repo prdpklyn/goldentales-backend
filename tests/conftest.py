@@ -1,6 +1,6 @@
 # tests/conftest.py
 """
-DreamWeaver Test Configuration
+GoldenTales Test Configuration
 ==============================
 Pytest fixtures and configuration for testing.
 """

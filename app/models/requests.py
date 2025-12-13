@@ -1,6 +1,6 @@
 # app/models/requests.py
 """
-DreamWeaver Request Models
+GoldenTales Request Models
 ==========================
 Pydantic models for API request validation.
 """

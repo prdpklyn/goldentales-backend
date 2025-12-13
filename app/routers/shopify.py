@@ -1,6 +1,6 @@
 # app/routers/shopify.py
 """
-DreamWeaver Shopify Router
+GoldenTales Shopify Router
 ==========================
 Handles Shopify webhooks for order processing and fulfillment.
 """

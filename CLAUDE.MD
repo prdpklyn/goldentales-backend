@@ -1,4 +1,4 @@
-# DreamWeaver Backend
+# GoldenTales Backend
 
 > AI-powered personalized children's storybook generation service
 

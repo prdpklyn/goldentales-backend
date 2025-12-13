@@ -1,6 +1,6 @@
 # app/routers/orders.py
 """
-DreamWeaver Orders Router
+GoldenTales Orders Router
 =========================
 API endpoints for order management and pricing.
 """

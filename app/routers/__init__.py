@@ -1,4 +1,4 @@
-# DreamWeaver Routers Package
+# GoldenTales Routers Package
 from app.routers.books import router as books_router
 from app.routers.orders import router as orders_router
 from app.routers.shopify import router as shopify_router

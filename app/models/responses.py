@@ -1,6 +1,6 @@
 # app/models/responses.py
 """
-DreamWeaver Response Models
+GoldenTales Response Models
 ===========================
 Pydantic models for API response serialization.
 """

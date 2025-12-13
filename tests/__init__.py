@@ -1,2 +1,2 @@
 # tests/__init__.py
-"""DreamWeaver Test Package"""
+"""GoldenTales Test Package"""

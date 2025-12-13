@@ -1,6 +1,6 @@
 # app/services/print_service.py
 """
-DreamWeaver Print Production Service
+GoldenTales Print Production Service
 =====================================
 Handles print-quality PDF generation after order payment.
 
@@ -255,7 +255,7 @@ class BookPDFGenerator:
     
     def __init__(
         self,
-        output_dir: str = "/tmp/dreamweaver_books",
+        output_dir: str = "/tmp/goldentales_books",
         book_format: BookFormat = BookFormat.SQUARE_8X8,
         theme: Optional[BookTheme] = None
     ):
@@ -349,8 +349,8 @@ class BookPDFGenerator:
         
         c.setFont("Helvetica", 12)
         c.setFillColor(self._hex_to_color(self.theme.text_color))
-        c.drawCentredString(back_x, back_y + 40, "Created with DreamWeaver")
-        c.drawCentredString(back_x, back_y + 20, "www.taleom.com")
+        c.drawCentredString(back_x, back_y + 40, "Created with GoldenTales")
+        c.drawCentredString(back_x, back_y + 20, "www.goldentales.app")
         
         c.showPage()
     
@@ -540,7 +540,7 @@ class BookPDFGenerator:
         
         c.setFont("Helvetica", 12)
         c.setFillColor(self._hex_to_color(self.theme.page_number_color))
-        c.drawCentredString(right_center_x, center_y, "Created with DreamWeaver")
+        c.drawCentredString(right_center_x, center_y, "Created with GoldenTales")
         c.drawCentredString(right_center_x, center_y - 20, "AI-Powered Personalized Storybooks")
         
         c.showPage()
@@ -653,7 +653,7 @@ class PrintService:
         self.upscale_method = upscale_method
         
         # Output directories
-        self.output_dir = Path("/tmp/dreamweaver_print")
+        self.output_dir = Path("/tmp/goldentales_print")
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         self.verification_dir = self.output_dir / "verification"
