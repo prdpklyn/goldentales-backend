@@ -20,8 +20,13 @@ from app.utils.logging import setup_logging, get_logger
 from app.middleware.request_id import RequestIDMiddleware
 from app.middleware.auth import APIKeyMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.versioning import VersioningMiddleware
 
-# Import routers
+# Import versioned routers
+from app.routers.v1 import router as v1_router
+from app.routers.common import router as common_router
+
+# Legacy routers (for backward compatibility during migration)
 from app.routers.books import router as books_router
 from app.routers.orders import router as orders_router
 from app.routers.shopify import router as shopify_router
@@ -38,16 +43,16 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info(f"Starting GoldenTales API v3.0.0")
     logger.info(f"Environment: {settings.environment.value}")
-    
+
     # Validate required API keys
     missing_keys = settings.validate_required_keys()
     if missing_keys:
         logger.warning(f"Missing API keys: {', '.join(missing_keys)}")
     else:
         logger.info("All required API keys configured")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down GoldenTales API")
 
@@ -94,18 +99,51 @@ app.add_middleware(
     enforce_in_dev=settings.api_key_required
 )
 
-logger.info(f"Middleware configured: RequestID, RateLimit (enabled={settings.rate_limit_enabled}), Auth")
+# 4. API Versioning (detects version from path, handles deprecation)
+app.add_middleware(
+    VersioningMiddleware,
+    enabled=True
+)
 
-# Register routers
-app.include_router(config_router)  # /, /api/health, /api/config
+logger.info(
+    f"Middleware configured: RequestID, RateLimit (enabled={settings.rate_limit_enabled}), "
+    f"Auth, Versioning"
+)
+
+# =================================================================
+# Versioned API Routes (recommended)
+# =================================================================
+# New versioned endpoints: /api/v1/books/*, /api/v1/orders/*, etc.
+app.include_router(v1_router, prefix="/api/v1")
+
+# =================================================================
+# Common Routes (version-agnostic)
+# =================================================================
+# Health checks and root: /, /api/health, /api/v1/health
+app.include_router(common_router)
+
+# =================================================================
+# Legacy Routes (backward compatibility)
+# =================================================================
+# These maintain the old /api/* paths for existing clients.
+# They will be deprecated in favor of /api/v1/* in a future release.
+#
+# Old paths:
+#   /api/books/* -> Now also at /api/v1/books/*
+#   /api/orders/* -> Now also at /api/v1/orders/*
+#   /api/shopify/* -> Now also at /api/v1/shopify/*
+#   /api/config -> Now also at /api/v1/config
+#
+# Migration: Update clients to use /api/v1/* prefix
 app.include_router(books_router)   # /api/books/*
 app.include_router(orders_router)  # /api/orders/*, /api/shipping-options
 app.include_router(shopify_router) # /api/shopify/*
+app.include_router(config_router)  # /api/config (legacy, not root)
 
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "main:app",
         host=settings.host,
