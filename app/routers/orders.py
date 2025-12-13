@@ -11,7 +11,7 @@ from typing import Dict, List
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 
-from app.config import settings
+from app.settings import settings
 from app.models.requests import OrderRequest
 from app.models.enums import BookFormat, ShippingTier
 from app.routers.books import get_book_storage

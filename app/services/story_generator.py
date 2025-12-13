@@ -9,7 +9,7 @@ import json
 import re
 from typing import List, Dict, Optional, Any
 
-from app.config import settings
+from app.settings import settings
 from app.utils.logging import get_logger
 from app.utils.security import sanitize_input
 

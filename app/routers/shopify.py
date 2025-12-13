@@ -10,7 +10,7 @@ from typing import Dict, Optional
 
 from fastapi import APIRouter, Request, HTTPException
 
-from app.config import settings
+from app.settings import settings
 from app.utils.security import verify_webhook_signature
 from app.utils.logging import get_logger
 from app.services.database import get_database

@@ -9,7 +9,7 @@ import os
 import asyncio
 from typing import List, Dict, Optional, Any
 
-from app.config import settings
+from app.settings import settings
 from app.models.enums import GenerationQuality
 from app.utils.logging import get_logger
 from app.utils.security import SAFETY_NEGATIVE_PROMPT

@@ -11,7 +11,7 @@ from typing import Dict
 
 from fastapi import APIRouter, HTTPException
 
-from app.config import settings
+from app.settings import settings
 from app.models.requests import CreateBookRequest, RegeneratePageRequest
 from app.models.enums import GenerationQuality
 from app.services.story_generator import StoryGenerator

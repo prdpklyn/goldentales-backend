@@ -10,7 +10,7 @@ import sys
 from typing import Optional
 from functools import lru_cache
 
-from app.config import settings
+from app.settings import settings
 
 
 def setup_logging(level: Optional[str] = None) -> None:

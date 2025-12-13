@@ -47,7 +47,7 @@ from PIL import Image
 import fal_client
 
 # Local imports
-from app.config import settings
+from app.settings import settings
 from app.models.enums import OrderStatus
 from app.utils.logging import get_logger
 

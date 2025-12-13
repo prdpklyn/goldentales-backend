@@ -7,7 +7,7 @@ import asyncio
 import sys
 sys.path.insert(0, '.')
 
-from app.config import settings
+from app.settings import settings
 from app.services.database import get_database
 from app.services.print_service import get_print_service, UpscaleMethod
 

@@ -14,7 +14,7 @@ from fastapi.security import APIKeyHeader
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response, JSONResponse
 
-from app.config import settings
+from app.settings import settings
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)

@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import configuration and logging
-from app.config import settings
+from app.settings import settings
 from app.utils.logging import setup_logging, get_logger
 
 # Import middleware

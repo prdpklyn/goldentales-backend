@@ -10,7 +10,7 @@ from typing import Dict
 
 from fastapi import APIRouter
 
-from app.config import settings
+from app.settings import settings
 from app.models.enums import Theme, ArtStyle, BookFormat
 from app.routers.orders import get_shipping_options, get_countdown
 from app.utils.logging import get_logger

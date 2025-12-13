@@ -7,7 +7,7 @@ Manages character profiles and bible generation.
 
 from typing import Dict, Optional, Tuple
 
-from app.config import settings
+from app.settings import settings
 from app.utils.logging import get_logger
 from character_system import (
     Gender, SkinTone, HairColor, HairStyle, EyeColor, BodyType,
