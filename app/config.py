@@ -61,8 +61,8 @@ class Settings(BaseSettings):
     shopify_access_token: Optional[str] = Field(default=None, alias="SHOPIFY_ACCESS_TOKEN")
     shopify_webhook_secret: Optional[str] = Field(default=None, alias="SHOPIFY_WEBHOOK_SECRET")
     
-    # Rate Limiting
-    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
+    # Rate Limiting (disabled in development by default)
+    rate_limit_enabled: bool = Field(default=False, alias="RATE_LIMIT_ENABLED")
     rate_limit_requests: int = 10  # requests per window
     rate_limit_window: int = 60   # seconds
 

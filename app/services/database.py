@@ -318,6 +318,186 @@ class DatabaseService:
         }
 
 
+    # ==========================================
+    # ORDER OPERATIONS
+    # ==========================================
+
+    async def create_order(self, order_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create a new order.
+
+        Args:
+            order_data: Complete order data dict
+
+        Returns:
+            The created order record
+        """
+        if not self._client:
+            raise ValueError("Database not configured")
+
+        result = self._client.table("orders").insert(order_data).execute()
+
+        if result.data:
+            logger.info(f"Created order: {result.data[0]['id']}")
+            return result.data[0]
+
+        raise Exception("Failed to create order")
+
+    async def get_order(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get an order by ID.
+
+        Args:
+            order_id: UUID of the order
+
+        Returns:
+            Order data or None if not found
+        """
+        if not self._client:
+            raise ValueError("Database not configured")
+
+        result = self._client.table("orders").select("*").eq("id", order_id).execute()
+
+        return result.data[0] if result.data else None
+
+    async def get_order_by_shopify_id(
+        self,
+        shopify_order_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get order by Shopify order ID.
+
+        Args:
+            shopify_order_id: Shopify's order ID
+
+        Returns:
+            Order data or None if not found
+        """
+        if not self._client:
+            raise ValueError("Database not configured")
+
+        result = (
+            self._client.table("orders")
+            .select("*")
+            .eq("shopify_order_id", shopify_order_id)
+            .execute()
+        )
+
+        return result.data[0] if result.data else None
+
+    async def update_order(
+        self,
+        order_id: str,
+        updates: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update an order.
+
+        Args:
+            order_id: UUID of the order
+            updates: Fields to update
+
+        Returns:
+            Updated order data
+        """
+        if not self._client:
+            raise ValueError("Database not configured")
+
+        updates["updated_at"] = datetime.utcnow().isoformat()
+
+        result = (
+            self._client.table("orders")
+            .update(updates)
+            .eq("id", order_id)
+            .execute()
+        )
+
+        return result.data[0] if result.data else None
+
+    async def get_orders_by_customer(
+        self,
+        customer_email: str,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Get orders for a customer by email.
+
+        Args:
+            customer_email: Customer's email address
+            limit: Maximum number of orders to return
+
+        Returns:
+            List of orders, newest first
+        """
+        if not self._client:
+            raise ValueError("Database not configured")
+
+        result = (
+            self._client.table("orders")
+            .select("*")
+            .eq("customer_email", customer_email)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+        return result.data or []
+
+    async def get_orders_by_status(
+        self,
+        status: str,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Get orders by status.
+
+        Args:
+            status: Order status to filter by
+            limit: Maximum number of orders to return
+
+        Returns:
+            List of matching orders
+        """
+        if not self._client:
+            raise ValueError("Database not configured")
+
+        result = (
+            self._client.table("orders")
+            .select("*")
+            .eq("status", status)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+        return result.data or []
+
+    async def get_order_with_book(
+        self,
+        order_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get order with associated book data.
+
+        Args:
+            order_id: UUID of the order
+
+        Returns:
+            Order with embedded book data, or None
+        """
+        order = await self.get_order(order_id)
+
+        if not order:
+            return None
+
+        book = await self.get_full_book(order["story_id"])
+
+        return {
+            **order,
+            "book": book
+        }
+
+
 # Global instance
 _db_service: Optional[DatabaseService] = None
 
