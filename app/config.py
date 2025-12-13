@@ -62,8 +62,16 @@ class Settings(BaseSettings):
     shopify_webhook_secret: Optional[str] = Field(default=None, alias="SHOPIFY_WEBHOOK_SECRET")
     
     # Rate Limiting
+    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
     rate_limit_requests: int = 10  # requests per window
     rate_limit_window: int = 60   # seconds
+
+    # Redis (for rate limiting and caching)
+    redis_url: Optional[str] = Field(default=None, alias="REDIS_URL")
+
+    # API Authentication
+    api_key_required: bool = Field(default=False, alias="API_KEY_REQUIRED")
+    dev_api_key: Optional[str] = Field(default=None, alias="DEV_API_KEY")
     
     # Pricing (USD)
     price_digital: float = 9.99

@@ -16,6 +16,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.utils.logging import setup_logging, get_logger
 
+# Import middleware
+from app.middleware.request_id import RequestIDMiddleware
+from app.middleware.auth import APIKeyMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware
+
 # Import routers
 from app.routers.books import router as books_router
 from app.routers.orders import router as orders_router
@@ -72,6 +77,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add custom middleware (order matters - executed in reverse order)
+# 1. Request ID (first, so all subsequent middleware has access)
+app.add_middleware(RequestIDMiddleware)
+
+# 2. Rate limiting (before auth, to protect against brute force)
+app.add_middleware(
+    RateLimitMiddleware,
+    enabled=settings.rate_limit_enabled
+)
+
+# 3. API Key Authentication (in production or when explicitly enabled)
+app.add_middleware(
+    APIKeyMiddleware,
+    enforce_in_dev=settings.api_key_required
+)
+
+logger.info(f"Middleware configured: RequestID, RateLimit (enabled={settings.rate_limit_enabled}), Auth")
 
 # Register routers
 app.include_router(config_router)  # /, /api/health, /api/config
