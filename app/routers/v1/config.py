@@ -72,6 +72,12 @@ async def get_config() -> Dict:
     }
 
     return {
+        "api": {
+            "version": "v1",
+            "status": "current",
+            "deprecation": None,
+            "sunset": None,
+        },
         "api_version": API_VERSION,
         "themes": [t.value for t in Theme],
         "art_styles": [s.value for s in ArtStyle],

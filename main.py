@@ -22,6 +22,9 @@ from app.middleware.auth import APIKeyMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.versioning import VersioningMiddleware
 
+# Import deprecation utilities
+from app.utils.deprecation import add_deprecation_headers
+
 # Import versioned routers
 from app.routers.v1 import router as v1_router
 from app.routers.common import router as common_router
@@ -139,6 +142,17 @@ app.include_router(books_router)   # /api/books/*
 app.include_router(orders_router)  # /api/orders/*, /api/shipping-options
 app.include_router(shopify_router) # /api/shopify/*
 app.include_router(config_router)  # /api/config (legacy, not root)
+
+
+# =================================================================
+# Deprecation Middleware (for legacy routes)
+# =================================================================
+@app.middleware("http")
+async def deprecation_middleware(request, call_next):
+    """Add deprecation headers to legacy endpoint responses."""
+    response = await call_next(request)
+    add_deprecation_headers(response, request)
+    return response
 
 
 if __name__ == "__main__":

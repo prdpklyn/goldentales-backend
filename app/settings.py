@@ -10,7 +10,7 @@ from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from functools import lru_cache
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from enum import Enum
 
 
@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     # API Authentication
     api_key_required: bool = Field(default=False, alias="API_KEY_REQUIRED")
     dev_api_key: Optional[str] = Field(default=None, alias="DEV_API_KEY")
+    
+    # API Versioning & Deprecation
+    legacy_api_deprecation_date: date = date(2025, 3, 1)  # March 1, 2025
+    legacy_api_sunset_date: date = date(2025, 6, 1)       # June 1, 2025
     
     # Pricing (USD)
     price_digital: float = 9.99

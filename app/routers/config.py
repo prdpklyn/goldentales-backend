@@ -67,6 +67,10 @@ async def health_check() -> Dict:
 @router.get("/api/config")
 async def get_config() -> Dict:
     """
+    ⚠️ DEPRECATED: This endpoint is deprecated. Use `/api/v1/config` instead.
+    
+    Sunset date: 2025-06-01
+    
     Get all public configuration for the frontend.
     
     Returns available themes, styles, prices, and character options.
@@ -78,6 +82,13 @@ async def get_config() -> Dict:
     }
     
     return {
+        "api": {
+            "version": "legacy",
+            "status": "deprecated",
+            "deprecation": str(settings.legacy_api_deprecation_date),
+            "sunset": str(settings.legacy_api_sunset_date),
+            "successor": "/api/v1/config",
+        },
         "themes": [t.value for t in Theme],
         "art_styles": [s.value for s in ArtStyle],
         "formats": [f.value for f in BookFormat],
