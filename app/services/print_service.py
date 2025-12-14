@@ -50,6 +50,8 @@ import fal_client
 from app.settings import settings
 from app.models.enums import OrderStatus
 from app.utils.logging import get_logger
+from app.utils.retry import with_retry
+from app.utils.exceptions import ExternalServiceException
 
 logger = get_logger(__name__)
 
@@ -166,6 +168,34 @@ class ImageUpscaler:
         self.fal_api_key = fal_api_key
         os.environ["FAL_KEY"] = fal_api_key
     
+    @with_retry(
+        max_attempts=3,
+        initial_delay=2.0,
+        max_delay=30.0,
+        circuit_breaker_name="fal_ai_upscale"
+    )
+    async def _call_fal_upscale_with_retry(
+        self,
+        model: str,
+        arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Call Fal.ai upscale API with retry logic."""
+        try:
+            result = await fal_client.run_async(model, arguments=arguments)
+            return result
+        except Exception as e:
+            error_msg = str(e).lower()
+            is_transient = any(
+                pattern in error_msg
+                for pattern in ['timeout', 'rate limit', 'unavailable', '429', '503']
+            )
+            
+            raise ExternalServiceException(
+                service_name="Fal.ai Upscale",
+                message=str(e),
+                is_transient=is_transient
+            )
+    
     async def upscale_image(
         self,
         image_url: str,
@@ -183,7 +213,7 @@ class ImageUpscaler:
         """Fast upscaling with Real-ESRGAN (~5s, ~$0.01)."""
         logger.info(f"Upscaling with Real-ESRGAN: {image_url[:60]}...")
         
-        result = await fal_client.run_async(
+        result = await self._call_fal_upscale_with_retry(
             "fal-ai/esrgan",
             arguments={
                 "image_url": image_url,
@@ -199,7 +229,7 @@ class ImageUpscaler:
         """Higher quality upscaling with Clarity (~15s, ~$0.03)."""
         logger.info(f"Upscaling with Clarity Upscaler: {image_url[:60]}...")
         
-        result = await fal_client.run_async(
+        result = await self._call_fal_upscale_with_retry(
             "fal-ai/clarity-upscaler",
             arguments={
                 "image_url": image_url,

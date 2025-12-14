@@ -19,6 +19,7 @@ redis==5.0.1
 sqlalchemy==2.0.25
 asyncpg>=0.30.0
 supabase>=2.0.0
+alembic==1.13.1
 
 # HTTP Client
 httpx==0.26.0

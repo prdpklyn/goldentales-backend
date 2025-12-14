@@ -12,6 +12,8 @@ from typing import List, Dict, Optional, Any
 from app.settings import settings
 from app.utils.logging import get_logger
 from app.utils.security import sanitize_input
+from app.utils.retry import with_retry
+from app.utils.exceptions import ExternalServiceException
 
 logger = get_logger(__name__)
 
@@ -52,6 +54,38 @@ class StoryGenerator:
         self.api_key = api_key or settings.gemini_api_key
         if not self.api_key:
             logger.warning("Gemini API key not configured")
+    
+    @with_retry(
+        max_attempts=3,
+        initial_delay=1.0,
+        max_delay=20.0,
+        circuit_breaker_name="gemini_ai"
+    )
+    async def _call_gemini_with_retry(
+        self,
+        prompt: str
+    ) -> str:
+        """Call Gemini API with retry logic."""
+        import google.generativeai as genai
+        
+        try:
+            genai.configure(api_key=self.api_key)
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            
+            response = await model.generate_content_async(prompt)
+            return response.text.strip()
+        except Exception as e:
+            error_msg = str(e).lower()
+            is_transient = any(
+                pattern in error_msg
+                for pattern in ['timeout', 'rate limit', 'unavailable', '429', '503', 'quota']
+            )
+            
+            raise ExternalServiceException(
+                service_name="Gemini AI",
+                message=str(e),
+                is_transient=is_transient
+            )
     
     async def generate_story(
         self,
@@ -111,8 +145,7 @@ class StoryGenerator:
         
         try:
             logger.info(f"Generating story for {child_name}, theme: {theme}")
-            response = await model.generate_content_async(prompt)
-            response_text = response.text.strip()
+            response_text = await self._call_gemini_with_retry(prompt)
             
             # Clean up response - remove markdown code blocks if present
             if response_text.startswith('```'):
@@ -135,7 +168,11 @@ class StoryGenerator:
             raise ValueError("Failed to generate story. Please try again.")
         except Exception as e:
             logger.error(f"Story generation failed: {e}")
-            raise ValueError(f"Story generation failed: {str(e)}")
+            raise ExternalServiceException(
+                service_name="Gemini AI",
+                message=f"Story generation failed: {str(e)}",
+                is_transient=False
+            )
     
     def _build_prompt(
         self,

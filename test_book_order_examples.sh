@@ -38,7 +38,7 @@ BOOK_RESPONSE=$(curl -s -X POST \
     "theme": "adventure",
     "art_style": "watercolor",
     "occasion": "birthday",
-    "special_details": "Emma loves unicorns and magic"
+    "special_details": "Emma loves unicorns and fairy tales"
   }' \
   "$BASE_URL/api/v1/books/create")
 

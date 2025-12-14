@@ -91,7 +91,7 @@ class CreateBookRequest(BaseModel):
         dangerous_patterns = [
             r'ignore\s+previous', r'disregard', r'forget\s+everything',
             r'new\s+instructions', r'system:', r'assistant:', r'\[INST\]',
-            r'</s>', r'<|', r'|>'
+            r'</s>', r'<\|', r'\|>'
         ]
         for pattern in dangerous_patterns:
             if re.search(pattern, v, re.IGNORECASE):

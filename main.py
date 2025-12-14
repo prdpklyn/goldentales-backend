@@ -9,8 +9,11 @@ All business logic has been extracted to the app/ package for modularity.
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Import configuration and logging
 from app.settings import settings
@@ -24,6 +27,9 @@ from app.middleware.versioning import VersioningMiddleware
 
 # Import deprecation utilities
 from app.utils.deprecation import add_deprecation_headers
+
+# Import exception classes
+from app.utils.exceptions import GoldenTalesException
 
 # Import versioned routers
 from app.routers.v1 import router as v1_router
@@ -112,6 +118,118 @@ logger.info(
     f"Middleware configured: RequestID, RateLimit (enabled={settings.rate_limit_enabled}), "
     f"Auth, Versioning"
 )
+
+
+# =================================================================
+# Exception Handlers
+# =================================================================
+
+@app.exception_handler(GoldenTalesException)
+async def goldentales_exception_handler(request: Request, exc: GoldenTalesException):
+    """Handle custom GoldenTales exceptions."""
+    request_id = request.headers.get("X-Request-ID", "unknown")
+    
+    logger.error(
+        f"GoldenTalesException [{exc.error_code}]: {exc.message}",
+        extra={
+            "request_id": request_id,
+            "path": request.url.path,
+            "error_code": exc.error_code,
+            "status_code": exc.status_code,
+            "details": exc.details
+        }
+    )
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.to_dict(),
+        headers={"X-Request-ID": request_id}
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Handle standard HTTP exceptions."""
+    request_id = request.headers.get("X-Request-ID", "unknown")
+    
+    logger.warning(
+        f"HTTP {exc.status_code}: {exc.detail}",
+        extra={
+            "request_id": request_id,
+            "path": request.url.path,
+            "status_code": exc.status_code
+        }
+    )
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": f"http_{exc.status_code}",
+            "message": exc.detail
+        },
+        headers={"X-Request-ID": request_id}
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle Pydantic validation errors."""
+    request_id = request.headers.get("X-Request-ID", "unknown")
+    
+    errors = exc.errors()
+    logger.warning(
+        f"Validation error: {len(errors)} field(s) invalid",
+        extra={
+            "request_id": request_id,
+            "path": request.url.path,
+            "errors": errors
+        }
+    )
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "validation_error",
+            "message": "Request validation failed",
+            "details": errors
+        },
+        headers={"X-Request-ID": request_id}
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Handle any unhandled exceptions."""
+    request_id = request.headers.get("X-Request-ID", "unknown")
+    
+    logger.exception(
+        f"Unhandled exception: {type(exc).__name__}",
+        extra={
+            "request_id": request_id,
+            "path": request.url.path,
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc)
+        }
+    )
+    
+    # In production, don't expose internal error details
+    if settings.is_production:
+        message = "An internal error occurred. Please contact support with request ID: " + request_id
+    else:
+        message = f"{type(exc).__name__}: {str(exc)}"
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "message": message,
+            "request_id": request_id
+        },
+        headers={"X-Request-ID": request_id}
+    )
+
+
+logger.info("Exception handlers configured")
 
 # =================================================================
 # Versioned API Routes (recommended)

@@ -121,7 +121,7 @@ def test_create_book():
         "theme": "adventure",
         "art_style": "watercolor",
         "occasion": "birthday",
-        "special_details": "Emma loves unicorns and magic"
+        "special_details": "Emma loves unicorns and fairy tales"
     }
     
     print(f"{Colors.YELLOW}Request Body:{Colors.NC}")

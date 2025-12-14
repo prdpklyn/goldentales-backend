@@ -13,6 +13,8 @@ from app.settings import settings
 from app.models.enums import GenerationQuality
 from app.utils.logging import get_logger
 from app.utils.security import SAFETY_NEGATIVE_PROMPT
+from app.utils.retry import with_retry
+from app.utils.exceptions import ExternalServiceException
 from character_system import CharacterDescriptionGenerator
 
 logger = get_logger(__name__)
@@ -91,6 +93,46 @@ class ImageGenerator:
             logger.warning("Fal.ai API key not configured")
         
         self.description_generator = CharacterDescriptionGenerator()
+    
+    @with_retry(
+        max_attempts=3,
+        initial_delay=2.0,
+        max_delay=30.0,
+        circuit_breaker_name="fal_ai"
+    )
+    async def _call_fal_ai_with_retry(
+        self,
+        model: str,
+        params: Dict[str, Any],
+        page_number: int
+    ) -> Dict[str, Any]:
+        """
+        Call Fal.ai API with automatic retry logic.
+        
+        This is wrapped with @with_retry decorator for:
+        - Exponential backoff on transient failures
+        - Circuit breaker to prevent cascade failures
+        - Automatic retry on rate limits and server errors
+        """
+        import fal_client
+        
+        try:
+            handler = await fal_client.submit_async(model, arguments=params)
+            result = await handler.get()
+            return result
+        except Exception as e:
+            # Convert to a more specific exception
+            error_msg = str(e).lower()
+            is_transient = any(
+                pattern in error_msg
+                for pattern in ['timeout', 'rate limit', 'unavailable', '429', '503']
+            )
+            
+            raise ExternalServiceException(
+                service_name="Fal.ai",
+                message=str(e),
+                is_transient=is_transient
+            )
     
     async def generate_illustration(
         self,
@@ -178,8 +220,8 @@ OUTPUT: High-quality children's book illustration, professional, vibrant, safe f
         try:
             logger.info(f"Generating page {page_number} with {quality.value} quality")
             
-            handler = await fal_client.submit_async(model, arguments=params)
-            result = await handler.get()
+            #  Call Fal.ai with retry logic
+            result = await self._call_fal_ai_with_retry(model, params, page_number)
             
             cost = getattr(settings, f"cost_{quality.value}", 0.02)
             
@@ -192,7 +234,11 @@ OUTPUT: High-quality children's book illustration, professional, vibrant, safe f
             
         except Exception as e:
             logger.error(f"Image generation failed for page {page_number}: {e}")
-            raise ValueError(f"Image generation failed: {str(e)}")
+            raise ExternalServiceException(
+                service_name="Fal.ai",
+                message=f"Image generation failed for page {page_number}: {str(e)}",
+                is_transient=True
+            )
     
     async def generate_all_illustrations(
         self,
