@@ -40,6 +40,7 @@ from app.routers.books import router as books_router
 from app.routers.orders import router as orders_router
 from app.routers.shopify import router as shopify_router
 from app.routers.config import router as config_router
+from app.routers.pdf import router as pdf_router
 
 # Set up logging
 setup_logging()
@@ -260,6 +261,7 @@ app.include_router(books_router)   # /api/books/*
 app.include_router(orders_router)  # /api/orders/*, /api/shipping-options
 app.include_router(shopify_router) # /api/shopify/*
 app.include_router(config_router)  # /api/config (legacy, not root)
+app.include_router(pdf_router)     # /api/pdf/*
 
 
 # =================================================================

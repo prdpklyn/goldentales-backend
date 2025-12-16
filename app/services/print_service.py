@@ -51,9 +51,20 @@ from app.settings import settings
 from app.models.enums import OrderStatus
 from app.utils.logging import get_logger
 from app.utils.retry import with_retry
-from app.utils.exceptions import ExternalServiceException
+from app.utils.exceptions import ExternalServiceException, NotFoundException
 
 logger = get_logger(__name__)
+
+# Import PDFDataService lazily to avoid circular imports
+_pdf_data_service = None
+
+def _get_pdf_data_service():
+    """Get PDF data service with lazy import to avoid circular imports."""
+    global _pdf_data_service
+    if _pdf_data_service is None:
+        from app.services.pdf_data_service import PDFDataService
+        _pdf_data_service = PDFDataService()
+    return _pdf_data_service
 
 
 # ============================================
@@ -666,7 +677,7 @@ class PrintService:
     
     Flow:
     1. Receive order with story_id
-    2. Fetch preview images from book data
+    2. Fetch story data from Supabase via PDFDataService
     3. UPSCALE preview images (NOT regenerate!)
     4. Generate PDF matching website preview
     5. Upload to fulfillment provider
@@ -692,15 +703,122 @@ class PrintService:
         # Job storage
         self.jobs: Dict[str, PrintJob] = {}
     
-    async def start_print_production(
+    async def _fetch_story_data(self, story_id: str) -> Dict:
+        """
+        Fetch story data from Supabase via PDFDataService.
+        
+        Args:
+            story_id: UUID of the story to fetch
+            
+        Returns:
+            Book data dictionary with title, child_name, pages, etc.
+            
+        Raises:
+            NotFoundException: If story not found
+            ExternalServiceException: If API call fails
+        """
+        logger.info(f"Fetching story data for print job: {story_id}")
+        
+        pdf_service = _get_pdf_data_service()
+        book_data = await pdf_service.get_pdf_book_data(story_id)
+        
+        # Convert PDFBookData to dict format expected by print production
+        return {
+            "book_id": book_data.book_id,
+            "title": book_data.title,
+            "child_name": book_data.child_name,
+            "child_age": book_data.child_age,
+            "theme": book_data.theme,
+            "art_style": book_data.art_style,
+            "cover_image_url": book_data.cover_image_url,
+            "character_bible": book_data.character_bible,
+            "pages": [
+                {
+                    "page_number": p.page_number,
+                    "text": p.text,
+                    "text_content": p.text,  # Alias for compatibility
+                    "image_url": p.image_url,
+                    "image_prompt": p.image_prompt
+                }
+                for p in book_data.pages
+            ]
+        }
+    
+    async def start_print_production_by_story_id(
         self,
         order_id: str,
-        book_data: Dict,
+        story_id: str,
         format: str = "hardcover",
         book_size: str = "square_8x8",
         shipping_address: Optional[Dict] = None
     ) -> PrintJob:
-        """Start the print production process."""
+        """
+        Start print production by fetching story data from Supabase.
+        
+        This is the recommended method - it fetches story data directly
+        from the Supabase Edge Function using PDFDataService.
+        
+        Args:
+            order_id: Unique order identifier
+            story_id: UUID of the story in Supabase
+            format: Book format (hardcover, softcover)
+            book_size: Book size (square_8x8, landscape_10x8)
+            shipping_address: Optional shipping address
+            
+        Returns:
+            PrintJob with job tracking information
+            
+        Raises:
+            NotFoundException: If story not found
+            ExternalServiceException: If fetching story fails
+        """
+        logger.info(f"Starting print production for order {order_id}, story {story_id}")
+        
+        # Fetch story data from Supabase
+        book_data = await self._fetch_story_data(story_id)
+        
+        # Start print production with fetched data
+        return await self.start_print_production(
+            order_id=order_id,
+            book_data=book_data,
+            format=format,
+            book_size=book_size,
+            shipping_address=shipping_address
+        )
+    
+    async def start_print_production(
+        self,
+        order_id: str,
+        book_data: Optional[Dict] = None,
+        story_id: Optional[str] = None,
+        format: str = "hardcover",
+        book_size: str = "square_8x8",
+        shipping_address: Optional[Dict] = None
+    ) -> PrintJob:
+        """
+        Start the print production process.
+        
+        Can be called with either:
+        - story_id: Fetches data from Supabase (recommended)
+        - book_data: Uses provided data directly (legacy)
+        
+        Args:
+            order_id: Unique order identifier
+            book_data: Optional book data dict (legacy, use story_id instead)
+            story_id: Optional story UUID to fetch from Supabase (recommended)
+            format: Book format (hardcover, softcover)
+            book_size: Book size
+            shipping_address: Optional shipping address
+            
+        Returns:
+            PrintJob with job tracking information
+        """
+        # If story_id provided, fetch data from Supabase
+        if story_id and not book_data:
+            book_data = await self._fetch_story_data(story_id)
+        elif not book_data and not story_id:
+            raise ValueError("Either book_data or story_id must be provided")
+        
         pages = book_data.get("pages", [])
         preview_urls = []
         for page in pages:
@@ -710,7 +828,7 @@ class PrintService:
         job = PrintJob(
             job_id=f"pj_{uuid.uuid4().hex[:12]}",
             order_id=order_id,
-            book_id=book_data.get("book_id", "unknown"),
+            book_id=book_data.get("book_id", story_id or "unknown"),
             preview_image_urls=preview_urls
         )
         
@@ -763,7 +881,8 @@ class PrintService:
                 title=book_data.get("title", "My Storybook"),
                 child_name=book_data.get("child_name", ""),
                 pages=book_data.get("pages", []),
-                image_urls=job.print_image_urls
+                image_urls=job.print_image_urls,
+                cover_image_url=book_data.get("cover_image_url")
             )
             
             job.pdf_path = pdf_path

@@ -64,17 +64,32 @@ pip install -r requirements.txt
 
 ### 2. Configure Database URL
 
-Set your Supabase connection string:
+**⚠️ IMPORTANT**: You need a PostgreSQL connection string, NOT the Supabase REST API URL!
+
+Set your database connection string:
 
 ```bash
-export SUPABASE_URL="postgresql://user:pass@host:port/database"
+# CORRECT - PostgreSQL connection string
+export DATABASE_URL="postgresql://postgres:password@db.xxxxx.supabase.co:5432/postgres"
+
+# WRONG - This is the REST API URL (won't work for migrations)
+# export SUPABASE_URL="https://xxxxx.supabase.co"
 ```
 
 Or add to `.env`:
 
 ```bash
-SUPABASE_URL=postgresql://user:pass@host:port/database
+# Add this to .env
+DATABASE_URL=postgresql://postgres:password@db.xxxxx.supabase.co:5432/postgres
 ```
+
+**How to get your PostgreSQL connection string:**
+1. Go to https://app.supabase.com
+2. Project Settings → Database
+3. Copy "Connection string" (URI format)
+4. Replace `[YOUR-PASSWORD]` with your database password
+
+**See `DATABASE_SETUP.md` for detailed connection configuration.**
 
 ### 3. Verify Setup
 

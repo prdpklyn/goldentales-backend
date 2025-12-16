@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
 Test script for print production with upscaling.
+
+Uses PDFDataService to fetch story data from Supabase Edge Function.
 """
 
 import asyncio
@@ -8,7 +10,7 @@ import sys
 sys.path.insert(0, '.')
 
 from app.settings import settings
-from app.services.database import get_database
+from app.services.pdf_data_service import get_pdf_data_service
 from app.services.print_service import get_print_service, UpscaleMethod
 
 
@@ -23,29 +25,56 @@ async def test_print_job(story_id: str, use_creative: bool = False):
     # Step 1: Check configuration
     print("\n[1/5] Checking configuration...")
     print(f"  Supabase URL: {'✓' if settings.supabase_url else '✗'}")
-    print(f"  Supabase Key: {'✓' if settings.supabase_key else '✗'}")
+    print(f"  PDF API Key: {'✓' if settings.supabase_pdf_api_key else '✗'}")
     print(f"  Fal Key: {'✓' if settings.fal_key else '✗'}")
     
-    if not settings.supabase_url or not settings.supabase_key:
-        print("\n❌ ERROR: Supabase credentials not configured!")
+    if not settings.supabase_url:
+        print("\n❌ ERROR: Supabase URL not configured!")
+        return
+    
+    if not settings.supabase_pdf_api_key:
+        print("\n❌ ERROR: SUPABASE_PDF_API_KEY not configured!")
+        print("   Add to .env: SUPABASE_PDF_API_KEY=972342793874592370592")
         return
     
     if not settings.fal_key:
         print("\n❌ ERROR: FAL_KEY not configured!")
         return
     
-    # Step 2: Fetch story from database
-    print("\n[2/5] Fetching story from Supabase...")
-    db = get_database()
+    # Step 2: Fetch story from Supabase Edge Function
+    print("\n[2/5] Fetching story from Supabase Edge Function...")
+    pdf_service = get_pdf_data_service()
     
     try:
-        book = await db.get_full_book(story_id)
+        book_data = await pdf_service.get_pdf_book_data(story_id)
+        # Convert to dict for compatibility
+        book = {
+            "book_id": book_data.book_id,
+            "title": book_data.title,
+            "child_name": book_data.child_name,
+            "child_age": book_data.child_age,
+            "theme": book_data.theme,
+            "art_style": book_data.art_style,
+            "cover_image_url": book_data.cover_image_url,
+            "character_bible": book_data.character_bible,
+            "pages": [
+                {
+                    "page_number": p.page_number,
+                    "text": p.text,
+                    "text_content": p.text,
+                    "image_url": p.image_url,
+                    "image_prompt": p.image_prompt
+                }
+                for p in book_data.pages
+            ],
+            "page_count": len(book_data.pages)
+        }
     except Exception as e:
         print(f"\n❌ ERROR fetching story: {e}")
         return
     
     if not book:
-        print(f"\n❌ ERROR: Story {story_id} not found in database!")
+        print(f"\n❌ ERROR: Story {story_id} not found!")
         return
     
     print(f"  ✓ Found story: {book['title']}")

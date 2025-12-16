@@ -38,7 +38,40 @@ if config.config_file_name is not None:
 target_metadata = None
 
 # Override database URL from settings
-config.set_main_option("sqlalchemy.url", settings.supabase_url or "")
+# Use dedicated database connection string (for Alembic/direct DB access)
+# This is separate from SUPABASE_URL which is the REST API URL for the client SDK
+database_url = settings.db_connection_string or ""
+
+# If no database URL is set, try to provide helpful error message
+if not database_url:
+    if settings.supabase_url and settings.supabase_url.startswith("https://"):
+        import re
+        match = re.match(r'https://([^.]+)\.supabase\.co', settings.supabase_url)
+        if match:
+            project_id = match.group(1)
+            print("\n" + "="*70)
+            print("⚠️  DATABASE CONNECTION NOT CONFIGURED")
+            print("="*70)
+            print("\nYou're using Supabase API keys (SUPABASE_URL + SUPABASE_PUBLISHABLE_KEY)")
+            print("which is correct for the Supabase client SDK.")
+            print("\nHowever, Alembic needs a direct PostgreSQL connection string.")
+            print("\n📋 SOLUTION: Add one of these to your .env file:")
+            print(f"\n   DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.{project_id}.supabase.co:5432/postgres")
+            print(f"\n   OR")
+            print(f"\n   SUPABASE_DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.{project_id}.supabase.co:5432/postgres")
+            print("\n📚 How to get your PostgreSQL connection string:")
+            print("   1. Go to https://app.supabase.com")
+            print("   2. Select your project")
+            print("   3. Settings → Database")
+            print("   4. Copy 'Connection string' (URI format)")
+            print("   5. Replace [YOUR-PASSWORD] with your database password")
+            print("\n" + "="*70 + "\n")
+    else:
+        print("\n⚠️  WARNING: No database connection string configured!")
+        print("   Set DATABASE_URL or SUPABASE_DATABASE_URL in .env")
+        print("   Format: postgresql://user:password@host:port/database\n")
+    
+config.set_main_option("sqlalchemy.url", database_url)
 
 
 def run_migrations_offline() -> None:

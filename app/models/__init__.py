@@ -11,6 +11,14 @@ from app.models.responses import (
     PriceResponse,
     OrderResponse,
 )
+from app.models.pdf_models import (
+    GetStoryForPDFRequest,
+    StoryForPDFResponse,
+    StoryData,
+    PageData,
+    PDFBookData,
+    PDFPageContent,
+)
 
 __all__ = [
     "CreateBookRequest",
@@ -21,4 +29,10 @@ __all__ = [
     "PageResponse",
     "PriceResponse",
     "OrderResponse",
+    "GetStoryForPDFRequest",
+    "StoryForPDFResponse",
+    "StoryData",
+    "PageData",
+    "PDFBookData",
+    "PDFPageContent",
 ]

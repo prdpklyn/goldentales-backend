@@ -53,17 +53,25 @@ class StorageService:
 
     def _initialize_client(self):
         """Initialize Supabase client."""
-        if not settings.supabase_url or not settings.supabase_key:
-            logger.warning("Supabase credentials not configured - storage disabled")
+        if not settings.supabase_url:
+            logger.warning("Supabase URL not configured - storage disabled")
+            return
+
+        # Prefer service_role key for backend operations (bypasses RLS)
+        api_key = settings.supabase_service_role_key or settings.supabase_key
+        
+        if not api_key:
+            logger.warning("Supabase API key not configured - storage disabled")
             return
 
         try:
             from supabase import create_client
             self._client = create_client(
                 settings.supabase_url,
-                settings.supabase_key
+                api_key
             )
-            logger.info("Storage service initialized")
+            key_type = "service_role" if settings.supabase_service_role_key else "publishable"
+            logger.info(f"Storage service initialized with {key_type} key")
         except Exception as e:
             logger.error(f"Failed to initialize storage: {e}")
 

@@ -234,6 +234,10 @@ class WebhookVerificationException(GoldenTalesException):
         )
 
 
+# Alias for convenience - NotFoundException is more intuitive
+NotFoundException = ResourceNotFoundException
+
+
 # Error code mapping for quick lookup
 ERROR_CODES = {
     "validation_error": ValidationException,

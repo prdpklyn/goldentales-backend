@@ -52,9 +52,23 @@ class Settings(BaseSettings):
     stripe_secret_key: Optional[str] = Field(default=None, alias="STRIPE_SECRET_KEY")
     sendgrid_api_key: Optional[str] = Field(default=None, alias="SENDGRID_API_KEY")
     
-    # Supabase Database
+    # Supabase REST API (for client SDK)
     supabase_url: Optional[str] = Field(default=None, alias="SUPABASE_URL")
     supabase_key: Optional[str] = Field(default=None, alias="SUPABASE_PUBLISHABLE_KEY")
+    
+    # Supabase Service Role Key (for backend operations that bypass RLS)
+    # Use this for print jobs, migrations, and admin operations
+    # ⚠️ NEVER expose this in client-side code - it bypasses all RLS policies!
+    supabase_service_role_key: Optional[str] = Field(default=None, alias="SUPABASE_SERVICE_ROLE_KEY")
+    
+    # Supabase PDF API Key (for get-story-for-pdf Edge Function)
+    supabase_pdf_api_key: Optional[str] = Field(default=None, alias="SUPABASE_PDF_API_KEY")
+    
+    # Supabase PostgreSQL Connection (for Alembic and direct DB access)
+    # This is different from SUPABASE_URL - it's the direct database connection string
+    # Format: postgresql://postgres:password@db.xxxxx.supabase.co:5432/postgres
+    supabase_db_url: Optional[str] = Field(default=None, alias="SUPABASE_DATABASE_URL")
+    database_url: Optional[str] = Field(default=None, alias="DATABASE_URL")  # Alternative name
     
     # Shopify
     shopify_store_url: Optional[str] = Field(default=None, alias="SHOPIFY_STORE_URL")
@@ -127,6 +141,15 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Check if running in production."""
         return self.environment == Environment.PRODUCTION
+    
+    @property
+    def db_connection_string(self) -> Optional[str]:
+        """
+        Get PostgreSQL connection string for database operations (Alembic, direct queries).
+        
+        Returns DATABASE_URL or SUPABASE_DATABASE_URL, whichever is set.
+        """
+        return self.database_url or self.supabase_db_url
     
     def validate_required_keys(self) -> List[str]:
         """Validate that required API keys are set. Returns list of missing keys."""

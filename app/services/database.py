@@ -38,15 +38,25 @@ class DatabaseService:
     def __init__(self):
         """Initialize Supabase client."""
         if self._client is None:
-            if not settings.supabase_url or not settings.supabase_key:
-                logger.warning("Supabase credentials not configured")
+            if not settings.supabase_url:
+                logger.warning("Supabase URL not configured")
+                return
+            
+            # Prefer service_role key for backend operations (bypasses RLS)
+            # Fall back to publishable key if service_role not available
+            api_key = settings.supabase_service_role_key or settings.supabase_key
+            
+            if not api_key:
+                logger.warning("Supabase API key not configured")
                 return
             
             self._client = create_client(
                 settings.supabase_url,
-                settings.supabase_key
+                api_key
             )
-            logger.info("Supabase client initialized")
+            
+            key_type = "service_role" if settings.supabase_service_role_key else "publishable"
+            logger.info(f"Supabase client initialized with {key_type} key")
     
     @property
     def client(self) -> Optional[Client]:
@@ -112,12 +122,39 @@ class DatabaseService:
         if not self._client:
             raise ValueError("Database not configured")
         
-        result = self._client.table("stories").select("*").eq("id", story_id).execute()
-        
-        if result.data:
-            return result.data[0]
-        
-        return None
+        try:
+            logger.debug(f"Querying stories table for story_id: {story_id}")
+            
+            # Primary query: stories table with id column
+            result = self._client.table("stories").select("*").eq("id", story_id).execute()
+            
+            logger.debug(f"Query result: {len(result.data) if result.data else 0} rows returned")
+            
+            if result.data:
+                logger.info(f"Found story: {result.data[0].get('id')}")
+                return result.data[0]
+            
+            # Story not found - this is normal if the story doesn't exist
+            logger.warning(f"Story {story_id} not found in 'stories' table")
+            return None
+            
+        except Exception as e:
+            error_msg = str(e)
+            error_dict = getattr(e, 'message', {}) if hasattr(e, 'message') else {}
+            
+            # Check if it's a column/table error
+            if "does not exist" in error_msg or "column" in error_msg.lower():
+                logger.error(f"Database schema error: {error_msg}")
+                logger.error("Possible issues:")
+                logger.error("  1. Table name should be 'stories' (not 'story')")
+                logger.error("  2. Column name should be 'id' (not 'story_id')")
+                logger.error("  3. Row Level Security (RLS) might be blocking the query")
+                logger.error("  4. Check if you're using the correct Supabase project")
+                raise ValueError(f"Database schema mismatch: {error_msg}")
+            
+            # Other errors
+            logger.error(f"Error fetching story {story_id}: {type(e).__name__}: {error_msg}")
+            raise
     
     async def update_story(
         self, 
