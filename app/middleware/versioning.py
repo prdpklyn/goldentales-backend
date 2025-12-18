@@ -34,11 +34,10 @@ API_VERSIONS: Dict[str, APIVersion] = {
         version="v1",
         status="current",
     ),
-    # Future versions can be added here:
-    # "v2": APIVersion(
-    #     version="v2",
-    #     status="current",
-    # ),
+    "v2": APIVersion(
+        version="v2",
+        status="current",
+    ),
 }
 
 # Default version for unversioned requests

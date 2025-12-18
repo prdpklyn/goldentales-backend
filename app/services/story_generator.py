@@ -14,6 +14,7 @@ from app.utils.logging import get_logger
 from app.utils.security import sanitize_input
 from app.utils.retry import with_retry
 from app.utils.exceptions import ExternalServiceException
+from app.utils.json_parser import parse_story_json
 
 logger = get_logger(__name__)
 
@@ -147,12 +148,13 @@ class StoryGenerator:
             logger.info(f"Generating story for {child_name}, theme: {theme}")
             response_text = await self._call_gemini_with_retry(prompt)
             
-            # Clean up response - remove markdown code blocks if present
-            if response_text.startswith('```'):
-                response_text = re.sub(r'^```(?:json)?\n?', '', response_text)
-                response_text = re.sub(r'\n?```$', '', response_text)
-            
-            story_pages = json.loads(response_text)
+            # Use robust JSON parser that handles LLM quirks
+            try:
+                story_pages = parse_story_json(response_text)
+            except ValueError as e:
+                logger.error(f"Failed to parse story JSON: {e}")
+                logger.debug(f"Raw response (first 1000 chars): {response_text[:1000]}")
+                raise ValueError("Failed to generate story. Please try again.")
             
             # Ensure character description is in every scene
             story_pages = self._enhance_scene_descriptions(
@@ -163,9 +165,9 @@ class StoryGenerator:
             logger.info(f"Generated {len(story_pages)} story pages")
             return story_pages[:10]  # Ensure exactly 10 pages
             
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse story JSON: {e}")
-            raise ValueError("Failed to generate story. Please try again.")
+        except ValueError:
+            # Re-raise ValueError as-is (from JSON parsing)
+            raise
         except Exception as e:
             logger.error(f"Story generation failed: {e}")
             raise ExternalServiceException(

@@ -3,12 +3,22 @@
 Test Create Book and Create Order APIs
 ========================================
 Comprehensive test script for book creation and order creation endpoints.
+
+Note: This is a standalone script, not a pytest test.
+Run directly: python test_create_book_and_order.py
 """
 
 import requests
 import json
 import sys
 from typing import Optional, Dict, Any
+
+# Skip these functions when run by pytest
+try:
+    import pytest
+    _skip_decorator = pytest.mark.skip(reason="Standalone script - run directly: python test_create_book_and_order.py")
+except ImportError:
+    _skip_decorator = lambda f: f  # No-op if pytest not available
 
 # Configuration
 BASE_URL = "http://localhost:8000"
@@ -102,6 +112,7 @@ def make_request(
         return None
 
 
+@_skip_decorator
 def test_create_book():
     """Test creating a book."""
     print_header("Test 1: Create Book")
@@ -138,6 +149,7 @@ def test_create_book():
     return response
 
 
+@_skip_decorator
 def test_get_book(book_id: str):
     """Test getting a book by ID."""
     print_header(f"Test 2: Get Book (ID: {book_id})")
@@ -151,6 +163,7 @@ def test_get_book(book_id: str):
     return response
 
 
+@_skip_decorator
 def test_get_book_preview(book_id: str):
     """Test getting book preview images."""
     print_header(f"Test 3: Get Book Preview (ID: {book_id})")
@@ -164,6 +177,7 @@ def test_get_book_preview(book_id: str):
     return response
 
 
+@_skip_decorator
 def test_get_book_price(book_id: str):
     """Test getting book price."""
     print_header(f"Test 4: Get Book Price (ID: {book_id})")
@@ -186,6 +200,7 @@ def test_get_book_price(book_id: str):
         )
 
 
+@_skip_decorator
 def test_create_order(book_id: str):
     """Test creating an order."""
     print_header(f"Test 5: Create Order (Book ID: {book_id})")
@@ -222,6 +237,7 @@ def test_create_order(book_id: str):
     return response
 
 
+@_skip_decorator
 def test_get_order_status(order_id: str):
     """Test getting order status."""
     print_header(f"Test 6: Get Order Status (ID: {order_id})")
@@ -235,6 +251,7 @@ def test_get_order_status(order_id: str):
     return response
 
 
+@_skip_decorator
 def test_shipping_options():
     """Test getting shipping options."""
     print_header("Test 7: Get Shipping Options")

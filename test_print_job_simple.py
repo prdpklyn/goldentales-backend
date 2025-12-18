@@ -8,10 +8,12 @@ import asyncio
 import sys
 sys.path.insert(0, '.')
 
+import pytest
 from app.services.print_service import get_print_service, UpscaleMethod
 from app.routers.books import get_book_storage
 
-async def test_print_job_from_api(book_id: str):
+@pytest.mark.skip(reason="Standalone script - run directly: python test_print_job_simple.py --book-id <id>")
+async def test_print_job_from_api(book_id: str = None):
     """Test print job using a book created via API."""
     
     print("=" * 60)

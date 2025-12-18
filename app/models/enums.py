@@ -44,6 +44,13 @@ class BookFormat(str, Enum):
     HARDCOVER = "hardcover"
 
 
+class BookTier(str, Enum):
+    """Book pricing/feature tiers."""
+    BASIC = "basic"       # AI character, standard layout
+    PREMIUM = "premium"   # Full-page illustrations, text overlays
+    ULTRA = "ultra"       # Photo-to-character + Premium features
+
+
 class GenerationQuality(str, Enum):
     """Image generation quality tiers."""
     PREVIEW = "preview"      # Fast, cheap - for initial preview

@@ -10,7 +10,7 @@ import asyncio
 from typing import List, Dict, Optional, Any
 
 from app.settings import settings
-from app.models.enums import GenerationQuality
+from app.models.enums import GenerationQuality, BookTier
 from app.utils.logging import get_logger
 from app.utils.security import SAFETY_NEGATIVE_PROMPT
 from app.utils.retry import with_retry
@@ -39,7 +39,7 @@ class ImageGenerator:
         )
     """
     
-    # Model configurations by quality tier
+    # Model configurations by quality tier - BASIC tier
     MODEL_CONFIGS = {
         GenerationQuality.PREVIEW: {
             "model": "fal-ai/flux/schnell",
@@ -57,6 +57,36 @@ class ImageGenerator:
             "guidance_scale": 7.5,
         }
     }
+    
+    # Model configurations for PREMIUM/ULTRA tiers (full-page spreads)
+    MODEL_CONFIGS_PREMIUM = {
+        GenerationQuality.PREVIEW: {
+            "model": "fal-ai/flux/schnell",
+            "image_size": {"width": 2048, "height": 1024},  # Wide for spread
+            "num_inference_steps": 4,
+        },
+        GenerationQuality.STANDARD: {
+            "model": "fal-ai/flux-pro",
+            "image_size": {"width": 2048, "height": 1024},
+            "guidance_scale": 7.5,
+        },
+        GenerationQuality.PRINT: {
+            "model": "fal-ai/flux-pro/v1.1",
+            "image_size": {"width": 3072, "height": 1536},  # High-res spread
+            "guidance_scale": 7.5,
+        }
+    }
+    
+    # Full-page composition instructions for Premium/Ultra tiers
+    FULL_PAGE_COMPOSITION = """
+COMPOSITION FOR FULL-PAGE LAYOUT:
+- Leave clear space at TOP (15%) for text overlay
+- Leave clear space at BOTTOM (20%) for paragraph text  
+- Main action should be in CENTER of image
+- Include areas with simple/solid backgrounds for text readability
+- Full bleed illustration across the entire spread
+- Avoid important details at edges (they may be cropped)
+"""
     
     # Style descriptions for prompts
     STYLE_DESCRIPTIONS = {
@@ -297,4 +327,220 @@ OUTPUT: High-quality children's book illustration, professional, vibrant, safe f
                 await asyncio.sleep(0.5)
         
         logger.info(f"Generated {len(illustrations)} illustrations")
+        return illustrations
+    
+    # ============================================
+    # PREMIUM/ULTRA TIER FEATURES
+    # ============================================
+    
+    async def generate_illustration_premium(
+        self,
+        character_bible: Dict[str, str],
+        scene_description: str,
+        character_action: str,
+        mood: str,
+        art_style: str,
+        page_number: int,
+        tier: BookTier,
+        character_reference_url: Optional[str] = None,
+        characters_in_scene: Optional[List[str]] = None,
+        quality: GenerationQuality = GenerationQuality.PREVIEW
+    ) -> Dict[str, Any]:
+        """
+        Generate illustration with premium features.
+        
+        Premium features:
+        - Full-page composition with text-safe zones
+        - Wider aspect ratio for spreads
+        
+        Ultra features (if character_reference_url provided):
+        - IP-Adapter for character consistency from photo
+        
+        Args:
+            character_bible: Character description dictionary
+            scene_description: Description of the scene
+            character_action: What the character is doing
+            mood: Emotional mood of the scene
+            art_style: Art style to use
+            page_number: Page number (used for seed consistency)
+            tier: Book tier (PREMIUM or ULTRA)
+            character_reference_url: URL of transformed character image (for ULTRA)
+            characters_in_scene: Names of additional characters
+            quality: Generation quality tier
+            
+        Returns:
+            Dictionary with url, quality, page_number, and cost
+        """
+        if not self.api_key:
+            raise ValueError("Fal.ai API key not configured")
+        
+        # Build the complete prompt
+        full_prompt = self.description_generator.build_page_prompt(
+            character_bible=character_bible,
+            scene_description=scene_description,
+            character_action=character_action,
+            mood=mood,
+            art_style=art_style,
+            page_number=page_number,
+            include_additional_characters=characters_in_scene
+        )
+        
+        # Add premium composition instructions
+        if tier in [BookTier.PREMIUM, BookTier.ULTRA]:
+            full_prompt += f"\n\n{self.FULL_PAGE_COMPOSITION}"
+        
+        # Add consistency rules
+        full_prompt += """
+
+CRITICAL CONSISTENCY RULES:
+- Character's face, hair, skin tone, and features must match the description EXACTLY
+- Same character design as all other pages in this book
+- Maintain exact hair color, style, and length
+- Keep any accessories (glasses, bows, etc.) consistent
+- Same clothing style/colors throughout
+
+OUTPUT: High-quality children's book illustration, professional, vibrant, safe for all ages.
+"""
+        
+        # Get premium model config
+        config = self.MODEL_CONFIGS_PREMIUM.get(
+            quality,
+            self.MODEL_CONFIGS[quality]  # Fallback to standard
+        )
+        model = config["model"]
+        
+        # Build params
+        params = {
+            "prompt": full_prompt,
+            "num_images": 1,
+            "enable_safety_checker": True,
+            "seed": 42 + page_number,
+        }
+        
+        # Add quality-specific params
+        if "image_size" in config:
+            params["image_size"] = config["image_size"]
+        if "num_inference_steps" in config:
+            params["num_inference_steps"] = config["num_inference_steps"]
+        if "guidance_scale" in config:
+            params["guidance_scale"] = config["guidance_scale"]
+        
+        # Add IP-Adapter for ULTRA tier with character reference
+        if tier == BookTier.ULTRA and character_reference_url:
+            params["ip_adapter_image_url"] = character_reference_url
+            params["ip_adapter_scale"] = 0.7  # Strong influence from reference
+        
+        # Add negative prompt
+        if quality != GenerationQuality.PREVIEW:
+            params["negative_prompt"] = SAFETY_NEGATIVE_PROMPT
+        
+        try:
+            logger.info(f"Generating {tier.value} tier page {page_number} with {quality.value} quality")
+            
+            result = await self._call_fal_ai_with_retry(model, params, page_number)
+            
+            # Calculate cost based on tier
+            if tier == BookTier.ULTRA:
+                cost = getattr(settings, f"cost_{quality.value}", 0.02) + 0.03  # Extra for IP-Adapter
+            elif tier == BookTier.PREMIUM:
+                cost = getattr(settings, f"cost_{quality.value}", 0.02) + 0.01  # Extra for premium composition
+            else:
+                cost = getattr(settings, f"cost_{quality.value}", 0.02)
+            
+            return {
+                "url": result['images'][0]['url'],
+                "quality": quality.value,
+                "tier": tier.value,
+                "page_number": page_number,
+                "cost": cost
+            }
+            
+        except Exception as e:
+            logger.error(f"Premium image generation failed for page {page_number}: {e}")
+            raise ExternalServiceException(
+                service_name="Fal.ai",
+                message=f"Image generation failed for page {page_number}: {str(e)}",
+                is_transient=True
+            )
+    
+    async def generate_all_illustrations_with_tier(
+        self,
+        character_bible: Dict[str, str],
+        story_pages: List[Dict],
+        art_style: str,
+        tier: BookTier = BookTier.BASIC,
+        character_reference_url: Optional[str] = None,
+        quality: GenerationQuality = GenerationQuality.PREVIEW,
+        batch_size: int = 3
+    ) -> List[Dict]:
+        """
+        Generate illustrations for all story pages with tier support.
+        
+        Args:
+            character_bible: Character description dictionary
+            story_pages: List of story page dictionaries
+            art_style: Art style to use
+            tier: Book tier (BASIC, PREMIUM, or ULTRA)
+            character_reference_url: Transformed character image (for ULTRA)
+            quality: Generation quality tier
+            batch_size: Number of concurrent generations
+            
+        Returns:
+            List of illustration result dictionaries
+        """
+        illustrations = []
+        
+        for i in range(0, len(story_pages), batch_size):
+            batch = story_pages[i:i + batch_size]
+            
+            # Use premium generation for PREMIUM and ULTRA tiers
+            if tier in [BookTier.PREMIUM, BookTier.ULTRA]:
+                tasks = [
+                    self.generate_illustration_premium(
+                        character_bible=character_bible,
+                        scene_description=page.get('scene_description', ''),
+                        character_action=page.get('character_action', ''),
+                        mood=page.get('mood', 'happy'),
+                        art_style=art_style,
+                        page_number=page.get('page_number', i + idx + 1),
+                        tier=tier,
+                        character_reference_url=character_reference_url,
+                        characters_in_scene=page.get('characters_in_scene', []),
+                        quality=quality
+                    )
+                    for idx, page in enumerate(batch)
+                ]
+            else:
+                # Use standard generation for BASIC tier
+                tasks = [
+                    self.generate_illustration(
+                        character_bible=character_bible,
+                        scene_description=page.get('scene_description', ''),
+                        character_action=page.get('character_action', ''),
+                        mood=page.get('mood', 'happy'),
+                        art_style=art_style,
+                        page_number=page.get('page_number', i + idx + 1),
+                        characters_in_scene=page.get('characters_in_scene', []),
+                        quality=quality
+                    )
+                    for idx, page in enumerate(batch)
+                ]
+            
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for result in batch_results:
+                if isinstance(result, Exception):
+                    logger.error(f"Batch image generation failed: {result}")
+                    illustrations.append({
+                        "url": "https://placehold.co/800x600/amber/white?text=Regenerate",
+                        "error": str(result)
+                    })
+                else:
+                    illustrations.append(result)
+            
+            # Small delay between batches to avoid rate limiting
+            if i + batch_size < len(story_pages):
+                await asyncio.sleep(0.5)
+        
+        logger.info(f"Generated {len(illustrations)} {tier.value} tier illustrations")
         return illustrations

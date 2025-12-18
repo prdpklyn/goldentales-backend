@@ -1,0 +1,1412 @@
+openapi: 3.0.3
+info:
+  title: GoldenTales API
+  description: |
+    Backend API for GoldenTales - a personalized children's storybook platform.
+    
+    ## Authentication
+    
+    This API uses two authentication methods:
+    
+    1. **JWT Bearer Token** - For frontend/user-facing endpoints (`weave-story`, `photo-character`)
+       - Obtained via Supabase Auth
+       - Pass in `Authorization: Bearer <token>` header
+    
+    2. **API Key** - For external service integration (PDF generator, webhooks)
+       - Pass in `x-api-key` header
+       - Contact admin for API key access
+    
+    ## Rate Limiting
+    
+    - `weave-story`: 10 story generations per 24-hour rolling window per user
+    - Returns 429 status with `RATE_LIMIT_EXCEEDED` error code when exceeded
+    
+    ## Base URL
+    
+    All endpoints are prefixed with the Supabase Functions URL.
+  version: 1.0.0
+  contact:
+    name: GoldenTales Support
+    url: https://goldentales.io
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://vjdvxjktqeuebilppxvy.supabase.co/functions/v1
+    description: Production server
+
+tags:
+  - name: Story Generation
+    description: Frontend endpoints for creating personalized storybooks
+  - name: Photo Character
+    description: Ultra tier photo-to-character transformation
+  - name: Story Management
+    description: CRUD operations for stories (API Key auth)
+  - name: Page Management
+    description: CRUD operations for story pages (API Key auth)
+  - name: Order Management
+    description: CRUD operations for orders (API Key auth)
+  - name: PDF Service
+    description: Endpoints for PDF generation service
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+paths:
+  /weave-story:
+    post:
+      tags:
+        - Story Generation
+      summary: Generate personalized storybook
+      description: |
+        Main story generation endpoint. Creates a story record, calls Railway API 
+        for AI generation, and stores resulting pages in the database.
+        
+        **Rate Limited**: 10 requests per 24 hours per user.
+      operationId: weaveStory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeaveStoryRequest'
+            examples:
+              basic:
+                summary: Basic tier story
+                value:
+                  child_name: "Emma"
+                  child_age: 5
+                  theme: "space"
+                  art_style: "watercolor"
+                  tier: "basic"
+                  character_json:
+                    hero:
+                      name: "Emma"
+                      gender: "girl"
+                      age: 5
+                      skin_tone: "light skin"
+                      hair_color: "brown hair"
+                      hair_style: "long wavy hair"
+                      eye_color: "blue"
+                      has_glasses: false
+                      has_freckles: false
+                      has_dimples: true
+                    additional_characters: []
+              ultra:
+                summary: Ultra tier with photo
+                value:
+                  child_name: "Max"
+                  child_age: 7
+                  theme: "dinosaur"
+                  art_style: "cartoon"
+                  tier: "ultra"
+                  is_photo_based: true
+                  character_reference_url: "https://storage.example.com/character-ref.png"
+                  character_json:
+                    hero:
+                      name: "Max"
+                      gender: "boy"
+                      age: 7
+                    additional_characters:
+                      - name: "Buddy"
+                        character_type: "pet"
+                        relationship: "loyal companion"
+                        pet_species: "golden retriever"
+                        pet_color: "golden"
+      responses:
+        '200':
+          description: Story generation initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeaveStoryResponse'
+              example:
+                storyId: "123e4567-e89b-12d3-a456-426614174000"
+                quota:
+                  remaining: 9
+                  reset_at: "2024-01-16T10:30:00Z"
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Validation failed"
+                code: "VALIDATION_ERROR"
+                details:
+                  child_name: "Required field"
+        '401':
+          description: Unauthorized - Invalid or missing JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Unauthorized"
+                code: "UNAUTHORIZED"
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Rate limit exceeded. Try again later."
+                code: "RATE_LIMIT_EXCEEDED"
+                details:
+                  reset_at: "2024-01-16T10:30:00Z"
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /photo-character:
+    post:
+      tags:
+        - Photo Character
+      summary: Photo-to-character transformation
+      description: |
+        Ultra tier feature for transforming uploaded photos into stylized character references.
+        
+        **Actions:**
+        - `validate` - Check photo quality and face detection
+        - `preview` - Generate stylized character preview (30-60 seconds)
+        - `approve` - Approve preview and get final character reference URL
+      operationId: photoCharacter
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/PhotoValidateRequest'
+                - $ref: '#/components/schemas/PhotoPreviewRequest'
+                - $ref: '#/components/schemas/PhotoApproveRequest'
+            examples:
+              validate:
+                summary: Validate photo
+                value:
+                  action: "validate"
+                  photo_url: "https://storage.example.com/uploaded-photo.jpg"
+              preview:
+                summary: Generate preview
+                value:
+                  action: "preview"
+                  photo_url: "https://storage.example.com/uploaded-photo.jpg"
+                  art_style: "watercolor"
+                  preserve_likeness: 0.8
+              approve:
+                summary: Approve preview
+                value:
+                  action: "approve"
+                  preview_id: "preview_1705123456789"
+      responses:
+        '200':
+          description: Action completed successfully
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PhotoValidateResponse'
+                  - $ref: '#/components/schemas/PhotoPreviewResponse'
+                  - $ref: '#/components/schemas/PhotoApproveResponse'
+              examples:
+                validate:
+                  summary: Validation result
+                  value:
+                    valid: true
+                    face_detected: true
+                    quality_score: 0.9
+                    issues: []
+                preview:
+                  summary: Preview generated
+                  value:
+                    preview_url: "https://storage.example.com/preview-abc123.png"
+                    preview_id: "preview_1705123456789"
+                    expires_at: "2024-01-15T12:00:00Z"
+                approve:
+                  summary: Approved
+                  value:
+                    character_reference_url: "https://storage.example.com/character-ref.png"
+                    approved: true
+        '400':
+          description: Invalid action or request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /create-story:
+    post:
+      tags:
+        - Story Management
+      summary: Create a new story record
+      description: Creates a story record in the database. Used by external services.
+      operationId: createStory
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStoryRequest'
+            example:
+              user_id: "123e4567-e89b-12d3-a456-426614174000"
+              child_name: "Emma"
+              child_age: 5
+              theme: "space"
+              art_style: "watercolor"
+              status: "draft"
+      responses:
+        '200':
+          description: Story created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoryResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /get-story:
+    post:
+      tags:
+        - Story Management
+      summary: Get story by ID
+      description: Retrieves a story record by its UUID.
+      operationId: getStory
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - story_id
+              properties:
+                story_id:
+                  type: string
+                  format: uuid
+                  description: Story UUID
+            example:
+              story_id: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Story found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoryResponse'
+        '404':
+          description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /update-story:
+    post:
+      tags:
+        - Story Management
+      summary: Update story fields
+      description: |
+        Updates specified fields on a story record.
+        
+        **Immutable fields** (cannot be updated):
+        - `id`
+        - `user_id`
+        - `created_at`
+      operationId: updateStory
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStoryRequest'
+            example:
+              story_id: "123e4567-e89b-12d3-a456-426614174000"
+              updates:
+                status: "ready"
+                cover_image_url: "https://storage.example.com/cover.png"
+      responses:
+        '200':
+          description: Story updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoryResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /create-page:
+    post:
+      tags:
+        - Page Management
+      summary: Create a story page
+      description: Creates a new page for a story with versioning support.
+      operationId: createPage
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePageRequest'
+            example:
+              story_id: "123e4567-e89b-12d3-a456-426614174000"
+              page_number: 1
+              text_content: "Once upon a time, Emma looked up at the stars..."
+              image_prompt: "A young girl with brown hair looking up at a starry night sky"
+              image_url: "https://storage.example.com/page1.png"
+      responses:
+        '200':
+          description: Page created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /get-pages:
+    post:
+      tags:
+        - Page Management
+      summary: Get all current pages for a story
+      description: |
+        Retrieves all pages for a story where `is_current = true`, 
+        ordered by `page_number` ascending.
+      operationId: getPages
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - story_id
+              properties:
+                story_id:
+                  type: string
+                  format: uuid
+            example:
+              story_id: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Pages retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Page'
+        '400':
+          description: Invalid story_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /update-page:
+    post:
+      tags:
+        - Page Management
+      summary: Update page content
+      description: |
+        Updates specified fields on a page record.
+        
+        **Immutable fields**:
+        - `id`
+        - `story_id`
+        - `created_at`
+      operationId: updatePage
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePageRequest'
+            example:
+              page_id: "456e7890-e89b-12d3-a456-426614174000"
+              updates:
+                text_content: "Updated story text..."
+                edited_by_user: true
+      responses:
+        '200':
+          description: Page updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponse'
+        '404':
+          description: Page not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /create-order:
+    post:
+      tags:
+        - Order Management
+      summary: Create an order record
+      description: Creates a new order for a story. Called before Shopify checkout.
+      operationId: createOrder
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              user_id: "123e4567-e89b-12d3-a456-426614174000"
+              story_id: "456e7890-e89b-12d3-a456-426614174000"
+              format: "hardcover"
+              gift_wrap: true
+              gift_message: "Happy Birthday!"
+              customer_email: "parent@example.com"
+              customer_name: "John Doe"
+      responses:
+        '200':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /get-order:
+    post:
+      tags:
+        - Order Management
+      summary: Get order by ID
+      description: Retrieves an order by internal ID or Shopify order ID.
+      operationId: getOrder
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                order_id:
+                  type: string
+                  format: uuid
+                  description: Internal order UUID
+                shopify_order_id:
+                  type: string
+                  description: Shopify order ID
+            example:
+              order_id: "789e0123-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /update-order:
+    post:
+      tags:
+        - Order Management
+      summary: Update order status/details
+      description: |
+        Updates order fields. Status changes are automatically logged to `status_history`.
+        
+        **Common status transitions:**
+        - `pending_payment` → `paid` (payment confirmed)
+        - `paid` → `processing` (PDF generation started)
+        - `processing` → `shipped` (order fulfilled)
+        - `shipped` → `delivered` (delivery confirmed)
+      operationId: updateOrder
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderRequest'
+            example:
+              order_id: "789e0123-e89b-12d3-a456-426614174000"
+              updates:
+                status: "paid"
+                shopify_order_id: "gid://shopify/Order/12345"
+                total_amount: 34.99
+      responses:
+        '200':
+          description: Order updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /get-orders-by-status:
+    post:
+      tags:
+        - Order Management
+      summary: List orders by status
+      description: Retrieves orders filtered by status, ordered by creation date descending.
+      operationId: getOrdersByStatus
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [pending_payment, paid, processing, shipped, delivered, cancelled, refunded]
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  default: 100
+            example:
+              status: "paid"
+              limit: 50
+      responses:
+        '200':
+          description: Orders retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /get-orders-by-customer:
+    post:
+      tags:
+        - Order Management
+      summary: List orders by customer email
+      description: Retrieves all orders for a customer email (case-insensitive).
+      operationId: getOrdersByCustomer
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_email
+              properties:
+                customer_email:
+                  type: string
+                  format: email
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  default: 50
+            example:
+              customer_email: "parent@example.com"
+              limit: 20
+      responses:
+        '200':
+          description: Orders retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid email format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /get-story-for-pdf:
+    post:
+      tags:
+        - PDF Service
+      summary: Get story with pages for PDF generation
+      description: |
+        Returns complete story data with all current pages for PDF generation service.
+        Includes full story metadata and ordered page content.
+      operationId: getStoryForPdf
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - story_id
+              properties:
+                story_id:
+                  type: string
+                  format: uuid
+            example:
+              story_id: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Story and pages retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  story:
+                    $ref: '#/components/schemas/Story'
+                  pages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Page'
+        '404':
+          description: Story not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from Supabase Auth
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: API key for external service access
+
+  schemas:
+    # Request Schemas
+    WeaveStoryRequest:
+      type: object
+      required:
+        - child_name
+        - child_age
+        - theme
+        - art_style
+        - character_json
+      properties:
+        child_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Child's name for the story
+        child_age:
+          type: integer
+          minimum: 1
+          maximum: 18
+          description: Child's age
+        theme:
+          type: string
+          enum: [space, dinosaur, ocean, forest, superhero, christmas, birthday, bedtime, adventure]
+          description: Story theme
+        art_style:
+          type: string
+          enum: [watercolor, cartoon, storybook, anime]
+          description: Illustration art style
+        tier:
+          type: string
+          enum: [basic, premium, ultra]
+          default: basic
+          description: Book tier
+        is_photo_based:
+          type: boolean
+          default: false
+          description: Whether story uses photo-based character (Ultra tier)
+        character_reference_url:
+          type: string
+          format: uri
+          description: Approved character reference URL (Ultra tier)
+        character_json:
+          $ref: '#/components/schemas/CharacterJson'
+        occasion:
+          type: string
+          maxLength: 200
+          description: Special occasion for the book
+        special_details:
+          type: string
+          maxLength: 1000
+          description: Additional story customization details
+        photo_url:
+          type: string
+          format: uri
+          description: Uploaded photo URL from Supabase Storage
+
+    CharacterJson:
+      type: object
+      required:
+        - hero
+      properties:
+        hero:
+          $ref: '#/components/schemas/HeroConfig'
+        additional_characters:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/AdditionalCharacter'
+
+    HeroConfig:
+      type: object
+      required:
+        - name
+        - gender
+        - age
+      properties:
+        name:
+          type: string
+        gender:
+          type: string
+          enum: [boy, girl]
+        age:
+          type: integer
+        skin_tone:
+          type: string
+          enum:
+            - light skin
+            - light olive/medium-light skin
+            - medium/olive skin
+            - medium-dark/tan skin
+            - dark brown skin
+            - very dark/deep brown skin
+        hair_color:
+          type: string
+          enum:
+            - black hair
+            - dark brown hair
+            - brown hair
+            - light brown hair
+            - blonde hair
+            - red/ginger hair
+            - auburn hair
+            - gray/white hair
+        hair_style:
+          type: string
+          description: Hair style description
+        eye_color:
+          type: string
+          enum: [brown, blue, green, hazel, gray, amber]
+        has_glasses:
+          type: boolean
+          default: false
+        glasses_type:
+          type: string
+          nullable: true
+        has_freckles:
+          type: boolean
+          default: false
+        has_dimples:
+          type: boolean
+          default: false
+
+    AdditionalCharacter:
+      type: object
+      required:
+        - name
+        - character_type
+        - relationship
+      properties:
+        name:
+          type: string
+        character_type:
+          type: string
+          enum: [sibling, parent, friend, pet, imaginary_friend]
+        relationship:
+          type: string
+          description: Relationship to the hero
+        gender:
+          type: string
+        age_description:
+          type: string
+        skin_tone:
+          type: string
+        hair_color:
+          type: string
+        distinctive_feature:
+          type: string
+        pet_species:
+          type: string
+          description: For pet type only
+        pet_color:
+          type: string
+          description: For pet type only
+
+    PhotoValidateRequest:
+      type: object
+      required:
+        - action
+        - photo_url
+      properties:
+        action:
+          type: string
+          enum: [validate]
+        photo_url:
+          type: string
+          format: uri
+
+    PhotoPreviewRequest:
+      type: object
+      required:
+        - action
+        - photo_url
+      properties:
+        action:
+          type: string
+          enum: [preview]
+        photo_url:
+          type: string
+          format: uri
+        art_style:
+          type: string
+          enum: [watercolor, cartoon, storybook, anime]
+          default: watercolor
+        preserve_likeness:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.8
+          description: How much to preserve original likeness (0-1)
+
+    PhotoApproveRequest:
+      type: object
+      required:
+        - action
+        - preview_id
+      properties:
+        action:
+          type: string
+          enum: [approve]
+        preview_id:
+          type: string
+          description: Preview ID from preview response
+
+    CreateStoryRequest:
+      type: object
+      required:
+        - user_id
+        - child_name
+        - child_age
+        - theme
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        child_name:
+          type: string
+        child_age:
+          type: integer
+        theme:
+          type: string
+        art_style:
+          type: string
+        status:
+          type: string
+          enum: [draft, generating, ready, failed]
+          default: draft
+        character_json:
+          $ref: '#/components/schemas/CharacterJson'
+        photo_url:
+          type: string
+        cover_image_url:
+          type: string
+        tier:
+          type: string
+          enum: [basic, premium, ultra]
+        is_photo_based:
+          type: boolean
+        character_reference_url:
+          type: string
+
+    UpdateStoryRequest:
+      type: object
+      required:
+        - story_id
+        - updates
+      properties:
+        story_id:
+          type: string
+          format: uuid
+        updates:
+          type: object
+          description: Fields to update (excludes id, user_id, created_at)
+
+    CreatePageRequest:
+      type: object
+      required:
+        - story_id
+        - page_number
+        - text_content
+      properties:
+        story_id:
+          type: string
+          format: uuid
+        page_number:
+          type: integer
+          minimum: 1
+        text_content:
+          type: string
+        image_prompt:
+          type: string
+        image_url:
+          type: string
+
+    UpdatePageRequest:
+      type: object
+      required:
+        - page_id
+        - updates
+      properties:
+        page_id:
+          type: string
+          format: uuid
+        updates:
+          type: object
+          description: Fields to update
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - user_id
+        - story_id
+        - format
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        story_id:
+          type: string
+          format: uuid
+        format:
+          type: string
+          enum: [digital, softcover, hardcover]
+        gift_wrap:
+          type: boolean
+          default: false
+        gift_message:
+          type: string
+          maxLength: 500
+        customer_email:
+          type: string
+          format: email
+        customer_name:
+          type: string
+        shipping_address:
+          type: object
+          properties:
+            line1:
+              type: string
+            line2:
+              type: string
+            city:
+              type: string
+            state:
+              type: string
+            postal_code:
+              type: string
+            country:
+              type: string
+
+    UpdateOrderRequest:
+      type: object
+      required:
+        - order_id
+        - updates
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        updates:
+          type: object
+          description: Fields to update
+
+    # Response Schemas
+    WeaveStoryResponse:
+      type: object
+      properties:
+        storyId:
+          type: string
+          format: uuid
+        quota:
+          type: object
+          properties:
+            remaining:
+              type: integer
+              description: Remaining story generations in current window
+            reset_at:
+              type: string
+              format: date-time
+              description: When rate limit resets
+
+    PhotoValidateResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        face_detected:
+          type: boolean
+        quality_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        issues:
+          type: array
+          items:
+            type: string
+          description: List of validation issues if any
+
+    PhotoPreviewResponse:
+      type: object
+      properties:
+        preview_url:
+          type: string
+          format: uri
+        preview_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    PhotoApproveResponse:
+      type: object
+      properties:
+        character_reference_url:
+          type: string
+          format: uri
+        approved:
+          type: boolean
+
+    StoryResponse:
+      type: object
+      properties:
+        story:
+          $ref: '#/components/schemas/Story'
+
+    PageResponse:
+      type: object
+      properties:
+        page:
+          $ref: '#/components/schemas/Page'
+
+    OrderResponse:
+      type: object
+      properties:
+        order:
+          $ref: '#/components/schemas/Order'
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        code:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - UNAUTHORIZED
+            - VALIDATION_ERROR
+            - NOT_FOUND
+            - RATE_LIMIT_EXCEEDED
+            - DATABASE_ERROR
+            - RAILWAY_API_ERROR
+            - INTERNAL_ERROR
+        details:
+          type: object
+          description: Additional error context
+
+    # Entity Schemas
+    Story:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        child_name:
+          type: string
+        child_age:
+          type: integer
+        theme:
+          type: string
+        art_style:
+          type: string
+        gender:
+          type: string
+        skin_tone:
+          type: string
+        hair_color:
+          type: string
+        hair_style:
+          type: string
+        eye_color:
+          type: string
+        special_features:
+          type: string
+        occasion:
+          type: string
+        special_details:
+          type: string
+        photo_url:
+          type: string
+        character_json:
+          $ref: '#/components/schemas/CharacterJson'
+        status:
+          type: string
+          enum: [draft, generating, ready, failed]
+        cover_image_url:
+          type: string
+        tier:
+          type: string
+          enum: [basic, premium, ultra]
+        is_photo_based:
+          type: boolean
+        character_reference_url:
+          type: string
+        error_json:
+          type: object
+          description: Error details if status is 'failed'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Page:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        story_id:
+          type: string
+          format: uuid
+        page_number:
+          type: integer
+        text_content:
+          type: string
+        image_prompt:
+          type: string
+        image_url:
+          type: string
+        version:
+          type: integer
+          description: Page version number
+        is_current:
+          type: boolean
+          description: Whether this is the active version
+        edited_by_user:
+          type: boolean
+          description: Whether user has manually edited this page
+        regen_count:
+          type: integer
+          description: Number of times image has been regenerated
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        story_id:
+          type: string
+          format: uuid
+        shopify_checkout_id:
+          type: string
+        shopify_order_id:
+          type: string
+        shopify_order_number:
+          type: string
+        status:
+          type: string
+          enum: [pending_payment, paid, processing, shipped, delivered, cancelled, refunded]
+        format:
+          type: string
+          enum: [digital, softcover, hardcover]
+        gift_wrap:
+          type: boolean
+        gift_message:
+          type: string
+        is_gift:
+          type: boolean
+        recipient_email:
+          type: string
+        total_amount:
+          type: number
+        base_price:
+          type: number
+        shipping_cost:
+          type: number
+        tax_amount:
+          type: number
+        discount_amount:
+          type: number
+        currency:
+          type: string
+          default: USD
+        customer_email:
+          type: string
+        customer_name:
+          type: string
+        customer_phone:
+          type: string
+        shipping_address:
+          type: object
+        shipping_tier:
+          type: string
+        tracking_number:
+          type: string
+        tracking_url:
+          type: string
+        pdf_url:
+          type: string
+        pdf_storage_path:
+          type: string
+        pdf_generated_at:
+          type: string
+          format: date-time
+        print_job_id:
+          type: string
+        fulfillment_provider:
+          type: string
+        fulfillment_order_id:
+          type: string
+        shipped_at:
+          type: string
+          format: date-time
+        delivered_at:
+          type: string
+          format: date-time
+        status_history:
+          type: array
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              note:
+                type: string
+        notes:
+          type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time

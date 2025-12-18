@@ -369,6 +369,71 @@ class CharacterDescriptionGenerator:
 # PHOTO ANALYSIS (Using Gemini Vision)
 # ============================================
 
+import re
+
+def _extract_json_from_response(response_text: str) -> Optional[Dict]:
+    """
+    Extract and parse JSON from LLM response, handling common issues.
+    
+    Handles:
+    - Markdown code blocks (```json ... ```)
+    - Extra text before/after JSON
+    - Trailing commas
+    """
+    if not response_text:
+        return None
+    
+    text = response_text.strip()
+    
+    # Step 1: Remove markdown code blocks
+    if text.startswith('```'):
+        text = re.sub(r'^```(?:json|JSON)?\s*\n?', '', text)
+        text = re.sub(r'\n?```\s*$', '', text)
+        text = text.strip()
+    
+    # Step 2: Try direct parsing
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    
+    # Step 3: Extract JSON object using bracket matching
+    start_idx = text.find('{')
+    if start_idx == -1:
+        return None
+    
+    depth = 0
+    in_string = False
+    escape_next = False
+    
+    for i, char in enumerate(text[start_idx:], start_idx):
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\':
+            escape_next = True
+            continue
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                json_text = text[start_idx:i + 1]
+                # Fix trailing commas
+                json_text = re.sub(r',\s*([}\]])', r'\1', json_text)
+                try:
+                    return json.loads(json_text)
+                except json.JSONDecodeError:
+                    return None
+    
+    return None
+
+
 async def analyze_photo_for_character(
     photo_url: str,
     gemini_api_key: str
@@ -397,7 +462,7 @@ async def analyze_photo_for_character(
         "overall_description": A 2-3 sentence description suitable for an illustrator
     }
     
-    Return ONLY the JSON, no other text.
+    Return ONLY valid JSON, no markdown, no extra text.
     """
     
     try:
@@ -405,17 +470,38 @@ async def analyze_photo_for_character(
         import httpx
         import base64
         
-        async with httpx.AsyncClient() as client:
-            response = await client.get(photo_url)
-            image_data = base64.b64encode(response.content).decode('utf-8')
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            img_response = await client.get(photo_url)
+            if img_response.status_code != 200:
+                print(f"Photo download failed: HTTP {img_response.status_code}")
+                return {
+                    "overall_description": "Unable to download photo, using default character design"
+                }
+            image_data = base64.b64encode(img_response.content).decode('utf-8')
+        
+        # Determine mime type from URL or default to jpeg
+        mime_type = "image/jpeg"
+        if photo_url.lower().endswith('.png'):
+            mime_type = "image/png"
+        elif photo_url.lower().endswith('.webp'):
+            mime_type = "image/webp"
         
         # Analyze with Gemini
         response = await model.generate_content_async([
             prompt,
-            {"mime_type": "image/jpeg", "data": image_data}
+            {"mime_type": mime_type, "data": image_data}
         ])
         
-        result = json.loads(response.text.strip())
+        # Use robust JSON extraction
+        result = _extract_json_from_response(response.text)
+        
+        if result is None:
+            print(f"Photo analysis: Could not parse JSON from response")
+            print(f"Raw response (first 500 chars): {response.text[:500] if response.text else 'empty'}")
+            return {
+                "overall_description": "Unable to analyze photo, using default character design"
+            }
+        
         return result
         
     except Exception as e:

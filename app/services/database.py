@@ -2,15 +2,17 @@
 """
 GoldenTales Database Service
 ============================
-Supabase integration for story and page management.
+Database operations via Supabase Edge Functions.
+
+This service now uses Edge Functions for all database operations,
+replacing direct Supabase client calls to comply with architectural constraints.
 """
 
+import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-import os
 
-from supabase import create_client, Client
-
+from app.services.database_edge_service import get_database_edge_service, DatabaseEdgeService
 from app.settings import settings
 from app.utils.logging import get_logger
 
@@ -19,49 +21,50 @@ logger = get_logger(__name__)
 
 class DatabaseService:
     """
-    Service for interacting with Supabase database.
+    Service for interacting with Supabase database via Edge Functions.
     
-    Tables:
+    All database operations go through Supabase Edge Functions,
+    not direct database connections. This ensures proper security,
+    RLS policies, and architectural compliance.
+    
+    Tables (accessed via Edge Functions):
     - stories: Main story/book data
     - pages: Individual pages with text and images
+    - orders: Order records
     """
     
     _instance: Optional["DatabaseService"] = None
-    _client: Optional[Client] = None
+    _edge_service: Optional[DatabaseEdgeService] = None
     
     def __new__(cls):
-        """Singleton pattern for database connection."""
+        """Singleton pattern for database service."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
     def __init__(self):
-        """Initialize Supabase client."""
-        if self._client is None:
+        """Initialize Database Service with Edge Functions."""
+        if self._edge_service is None:
             if not settings.supabase_url:
                 logger.warning("Supabase URL not configured")
                 return
             
-            # Prefer service_role key for backend operations (bypasses RLS)
-            # Fall back to publishable key if service_role not available
-            api_key = settings.supabase_service_role_key or settings.supabase_key
-            
-            if not api_key:
+            if not settings.supabase_pdf_api_key:
                 logger.warning("Supabase API key not configured")
                 return
             
-            self._client = create_client(
-                settings.supabase_url,
-                api_key
-            )
-            
-            key_type = "service_role" if settings.supabase_service_role_key else "publishable"
-            logger.info(f"Supabase client initialized with {key_type} key")
+            self._edge_service = get_database_edge_service()
+            logger.info("DatabaseService initialized with Edge Functions")
     
     @property
-    def client(self) -> Optional[Client]:
-        """Get the Supabase client."""
-        return self._client
+    def client(self) -> Optional[DatabaseEdgeService]:
+        """
+        Get the Edge Function service.
+        
+        Note: This property is maintained for backwards compatibility,
+        but now returns the Edge Function service instead of direct client.
+        """
+        return self._edge_service
     
     # ==========================================
     # STORY OPERATIONS
@@ -78,40 +81,46 @@ class DatabaseService:
         pets: Optional[str] = None,
         parents: Optional[str] = None,
         friends: Optional[str] = None,
+        user_id: Optional[str] = None,
+        auth_token: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Create a new story in the database.
+        Create a new story via Edge Function.
+        
+        Args:
+            user_id: Optional user ID (required for RLS if not using auth_token)
+            auth_token: Optional JWT token for RLS
         
         Returns:
             The created story record with id.
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
         
-        data = {
-            "child_name": child_name,
-            "child_age": child_age,
-            "theme": theme,
-            "photo_url": photo_url,
-            "siblings": siblings,
-            "favorite_characters": favorite_characters,
-            "pets": pets,
-            "parents": parents,
-            "friends": friends,
-        }
+        # user_id is required for RLS - use a default if not provided (dev mode)
+        if not user_id:
+            user_id = str(uuid.uuid4())
+            logger.warning(f"No user_id provided to create_story, using temporary ID: {user_id}")
         
-        result = self._client.table("stories").insert(data).execute()
-        
-        if result.data:
-            logger.info(f"Created story: {result.data[0]['id']}")
-            return result.data[0]
-        
-        raise Exception("Failed to create story")
+        return await self._edge_service.create_story(
+            user_id=user_id,
+            child_name=child_name,
+            child_age=child_age,
+            theme=theme,
+            photo_url=photo_url,
+            siblings=siblings,
+            favorite_characters=favorite_characters,
+            pets=pets,
+            parents=parents,
+            friends=friends,
+            auth_token=auth_token,
+            **kwargs
+        )
     
     async def get_story(self, story_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get a story by ID.
+        Get a story by ID via Edge Function.
         
         Args:
             story_id: UUID of the story
@@ -119,60 +128,29 @@ class DatabaseService:
         Returns:
             Story data or None if not found
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
         
-        try:
-            logger.debug(f"Querying stories table for story_id: {story_id}")
-            
-            # Primary query: stories table with id column
-            result = self._client.table("stories").select("*").eq("id", story_id).execute()
-            
-            logger.debug(f"Query result: {len(result.data) if result.data else 0} rows returned")
-            
-            if result.data:
-                logger.info(f"Found story: {result.data[0].get('id')}")
-                return result.data[0]
-            
-            # Story not found - this is normal if the story doesn't exist
-            logger.warning(f"Story {story_id} not found in 'stories' table")
-            return None
-            
-        except Exception as e:
-            error_msg = str(e)
-            error_dict = getattr(e, 'message', {}) if hasattr(e, 'message') else {}
-            
-            # Check if it's a column/table error
-            if "does not exist" in error_msg or "column" in error_msg.lower():
-                logger.error(f"Database schema error: {error_msg}")
-                logger.error("Possible issues:")
-                logger.error("  1. Table name should be 'stories' (not 'story')")
-                logger.error("  2. Column name should be 'id' (not 'story_id')")
-                logger.error("  3. Row Level Security (RLS) might be blocking the query")
-                logger.error("  4. Check if you're using the correct Supabase project")
-                raise ValueError(f"Database schema mismatch: {error_msg}")
-            
-            # Other errors
-            logger.error(f"Error fetching story {story_id}: {type(e).__name__}: {error_msg}")
-            raise
+        return await self._edge_service.get_story(story_id)
     
     async def update_story(
         self, 
         story_id: str, 
-        updates: Dict[str, Any]
+        updates: Dict[str, Any],
+        auth_token: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
-        """Update a story."""
-        if not self._client:
+        """
+        Update a story via Edge Function.
+        
+        Args:
+            story_id: UUID of the story
+            updates: Fields to update
+            auth_token: Optional JWT token for RLS
+        """
+        if not self._edge_service:
             raise ValueError("Database not configured")
         
-        updates["updated_at"] = datetime.utcnow().isoformat()
-        
-        result = self._client.table("stories").update(updates).eq("id", story_id).execute()
-        
-        if result.data:
-            return result.data[0]
-        
-        return None
+        return await self._edge_service.update_story(story_id, updates, auth_token=auth_token)
     
     # ==========================================
     # PAGE OPERATIONS
@@ -184,10 +162,11 @@ class DatabaseService:
         page_number: int,
         text_content: str,
         image_prompt: str,
-        image_url: Optional[str] = None
+        image_url: Optional[str] = None,
+        auth_token: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Create a page for a story.
+        Create a page for a story via Edge Function.
         
         Args:
             story_id: UUID of the parent story
@@ -195,32 +174,26 @@ class DatabaseService:
             text_content: The story text for this page
             image_prompt: The prompt used to generate the image
             image_url: URL of the generated image
+            auth_token: Optional JWT token for RLS
             
         Returns:
             The created page record
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
         
-        data = {
-            "story_id": story_id,
-            "page_number": page_number,
-            "text_content": text_content,
-            "image_prompt": image_prompt,
-            "image_url": image_url
-        }
-        
-        result = self._client.table("pages").insert(data).execute()
-        
-        if result.data:
-            logger.info(f"Created page {page_number} for story {story_id}")
-            return result.data[0]
-        
-        raise Exception(f"Failed to create page {page_number}")
+        return await self._edge_service.create_page(
+            story_id=story_id,
+            page_number=page_number,
+            text_content=text_content,
+            image_prompt=image_prompt,
+            image_url=image_url,
+            auth_token=auth_token
+        )
     
     async def get_pages(self, story_id: str) -> List[Dict[str, Any]]:
         """
-        Get all pages for a story, ordered by page_number.
+        Get all pages for a story via Edge Function, ordered by page_number.
         
         Args:
             story_id: UUID of the story
@@ -228,56 +201,40 @@ class DatabaseService:
         Returns:
             List of page records
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
         
-        result = (
-            self._client.table("pages")
-            .select("*")
-            .eq("story_id", story_id)
-            .order("page_number")
-            .execute()
-        )
-        
-        return result.data or []
+        return await self._edge_service.get_pages(story_id)
     
     async def update_page(
         self,
         page_id: str,
-        updates: Dict[str, Any]
+        updates: Dict[str, Any],
+        auth_token: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
-        """Update a page."""
-        if not self._client:
+        """
+        Update a page via Edge Function.
+        
+        Args:
+            page_id: UUID of the page
+            updates: Fields to update
+            auth_token: Optional JWT token for RLS
+        """
+        if not self._edge_service:
             raise ValueError("Database not configured")
         
-        result = self._client.table("pages").update(updates).eq("id", page_id).execute()
-        
-        if result.data:
-            return result.data[0]
-        
-        return None
+        return await self._edge_service.update_page(page_id, updates, auth_token=auth_token)
     
     async def get_page_by_number(
         self,
         story_id: str,
         page_number: int
     ) -> Optional[Dict[str, Any]]:
-        """Get a specific page by story_id and page_number."""
-        if not self._client:
+        """Get a specific page by story_id and page_number via Edge Function."""
+        if not self._edge_service:
             raise ValueError("Database not configured")
         
-        result = (
-            self._client.table("pages")
-            .select("*")
-            .eq("story_id", story_id)
-            .eq("page_number", page_number)
-            .execute()
-        )
-        
-        if result.data:
-            return result.data[0]
-        
-        return None
+        return await self._edge_service.get_page_by_number(story_id, page_number)
     
     # ==========================================
     # COMBINED OPERATIONS
@@ -285,7 +242,7 @@ class DatabaseService:
     
     async def get_full_book(self, story_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get a complete book with story data and all pages.
+        Get a complete book with story data and all pages via Edge Functions.
         
         This is the main method used by the print service.
         
@@ -295,64 +252,10 @@ class DatabaseService:
         Returns:
             Combined book data with pages, or None if not found
         """
-        story = await self.get_story(story_id)
+        if not self._edge_service:
+            raise ValueError("Database not configured")
         
-        if not story:
-            return None
-        
-        pages = await self.get_pages(story_id)
-        
-        # Transform to the format expected by PrintService
-        return {
-            "book_id": story["id"],
-            "title": f"{story['child_name']}'s {story['theme'].title()} Adventure",
-            "child_name": story["child_name"],
-            "child_age": story["child_age"],
-            "theme": story["theme"],
-            "photo_url": story.get("photo_url"),
-            "pages": [
-                {
-                    "page_number": p["page_number"],
-                    "text": p["text_content"],
-                    "scene_description": p["image_prompt"],
-                    "image_url": p["image_url"]
-                }
-                for p in pages
-            ],
-            "preview_images": [p["image_url"] for p in pages if p.get("image_url")],
-            "page_count": len(pages),
-            "created_at": story["created_at"],
-            # Character bible would need to be reconstructed or stored
-            "character_bible": self._build_character_bible_from_story(story, pages)
-        }
-    
-    def _build_character_bible_from_story(
-        self, 
-        story: Dict[str, Any],
-        pages: List[Dict[str, Any]]
-    ) -> Dict[str, str]:
-        """
-        Reconstruct character bible from story data.
-        
-        The image_prompt in pages contains the character description,
-        so we extract it from the first page.
-        """
-        main_char_desc = ""
-        
-        if pages and pages[0].get("image_prompt"):
-            # The prompt contains the character description at the start
-            prompt = pages[0]["image_prompt"]
-            # Extract description before "Scene:"
-            if "Scene:" in prompt:
-                main_char_desc = prompt.split("Scene:")[0].strip()
-            else:
-                main_char_desc = prompt[:200]  # Fallback
-        
-        return {
-            "main_character": main_char_desc,
-            "main_character_short": f"{story['child_name']}, {story['child_age']}-year-old",
-            "additional_characters": []
-        }
+        return await self._edge_service.get_full_book(story_id)
 
 
     # ==========================================
@@ -361,7 +264,7 @@ class DatabaseService:
 
     async def create_order(self, order_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Create a new order.
+        Create a new order via Edge Function.
 
         Args:
             order_data: Complete order data dict
@@ -369,20 +272,14 @@ class DatabaseService:
         Returns:
             The created order record
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
 
-        result = self._client.table("orders").insert(order_data).execute()
-
-        if result.data:
-            logger.info(f"Created order: {result.data[0]['id']}")
-            return result.data[0]
-
-        raise Exception("Failed to create order")
+        return await self._edge_service.create_order(order_data)
 
     async def get_order(self, order_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get an order by ID.
+        Get an order by ID via Edge Function.
 
         Args:
             order_id: UUID of the order
@@ -390,19 +287,17 @@ class DatabaseService:
         Returns:
             Order data or None if not found
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
 
-        result = self._client.table("orders").select("*").eq("id", order_id).execute()
-
-        return result.data[0] if result.data else None
+        return await self._edge_service.get_order(order_id)
 
     async def get_order_by_shopify_id(
         self,
         shopify_order_id: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Get order by Shopify order ID.
+        Get order by Shopify order ID via Edge Function.
 
         Args:
             shopify_order_id: Shopify's order ID
@@ -410,17 +305,10 @@ class DatabaseService:
         Returns:
             Order data or None if not found
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
 
-        result = (
-            self._client.table("orders")
-            .select("*")
-            .eq("shopify_order_id", shopify_order_id)
-            .execute()
-        )
-
-        return result.data[0] if result.data else None
+        return await self._edge_service.get_order_by_shopify_id(shopify_order_id)
 
     async def update_order(
         self,
@@ -428,7 +316,7 @@ class DatabaseService:
         updates: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """
-        Update an order.
+        Update an order via Edge Function.
 
         Args:
             order_id: UUID of the order
@@ -437,19 +325,10 @@ class DatabaseService:
         Returns:
             Updated order data
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
 
-        updates["updated_at"] = datetime.utcnow().isoformat()
-
-        result = (
-            self._client.table("orders")
-            .update(updates)
-            .eq("id", order_id)
-            .execute()
-        )
-
-        return result.data[0] if result.data else None
+        return await self._edge_service.update_order(order_id, updates)
 
     async def get_orders_by_customer(
         self,
@@ -457,7 +336,7 @@ class DatabaseService:
         limit: int = 50
     ) -> List[Dict[str, Any]]:
         """
-        Get orders for a customer by email.
+        Get orders for a customer by email via Edge Function.
 
         Args:
             customer_email: Customer's email address
@@ -466,19 +345,10 @@ class DatabaseService:
         Returns:
             List of orders, newest first
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
 
-        result = (
-            self._client.table("orders")
-            .select("*")
-            .eq("customer_email", customer_email)
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-
-        return result.data or []
+        return await self._edge_service.get_orders_by_customer(customer_email, limit)
 
     async def get_orders_by_status(
         self,
@@ -486,7 +356,7 @@ class DatabaseService:
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
-        Get orders by status.
+        Get orders by status via Edge Function.
 
         Args:
             status: Order status to filter by
@@ -495,26 +365,17 @@ class DatabaseService:
         Returns:
             List of matching orders
         """
-        if not self._client:
+        if not self._edge_service:
             raise ValueError("Database not configured")
 
-        result = (
-            self._client.table("orders")
-            .select("*")
-            .eq("status", status)
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-
-        return result.data or []
+        return await self._edge_service.get_orders_by_status(status, limit)
 
     async def get_order_with_book(
         self,
         order_id: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Get order with associated book data.
+        Get order with associated book data via Edge Functions.
 
         Args:
             order_id: UUID of the order
@@ -522,17 +383,10 @@ class DatabaseService:
         Returns:
             Order with embedded book data, or None
         """
-        order = await self.get_order(order_id)
+        if not self._edge_service:
+            raise ValueError("Database not configured")
 
-        if not order:
-            return None
-
-        book = await self.get_full_book(order["story_id"])
-
-        return {
-            **order,
-            "book": book
-        }
+        return await self._edge_service.get_order_with_book(order_id)
 
 
 # Global instance

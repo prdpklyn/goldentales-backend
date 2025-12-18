@@ -10,11 +10,12 @@ import sys
 sys.path.insert(0, '.')
 
 from app.settings import settings
+import pytest
 from app.services.pdf_data_service import get_pdf_data_service
 from app.services.print_service import get_print_service, UpscaleMethod
 
-
-async def test_print_job(story_id: str, use_creative: bool = False):
+@pytest.mark.skip(reason="Standalone script - run directly: python test_print_job.py <story_id>")
+async def test_print_job(story_id: str = None, use_creative: bool = False):
     """Test the print job process for a story."""
     
     print("=" * 60)

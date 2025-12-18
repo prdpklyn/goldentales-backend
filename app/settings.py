@@ -91,22 +91,25 @@ class Settings(BaseSettings):
     legacy_api_deprecation_date: date = date(2025, 3, 1)  # March 1, 2025
     legacy_api_sunset_date: date = date(2025, 6, 1)       # June 1, 2025
     
-    # Pricing (USD)
+    # AI Generation Costs (internal tracking)
+    cost_preview: float = 0.02
+    cost_standard: float = 0.05
+    cost_print: float = 0.10
+    cost_photo_character_transform: float = 0.08  # nano-banana edit cost
+    cost_story_generation: float = 0.01  # Gemini cost per story
+    cost_image_upscale: float = 0.10  # Per-page upscaling
+    
+    # Book Pricing (customer-facing)
     price_digital: float = 9.99
     price_softcover: float = 24.99
     price_hardcover: float = 34.99
     
-    # Shipping Costs (USD)
+    # Shipping Costs
     shipping_standard: float = 5.99
     shipping_express: float = 14.99
     
-    # Gift Wrap
+    # Gift Options
     gift_wrap_cost: float = 5.00
-    
-    # Generation Costs (internal tracking)
-    cost_preview: float = 0.02
-    cost_standard: float = 0.05
-    cost_print: float = 0.10
     
     # Christmas Timeline
     christmas_year: int = 2024

@@ -29,6 +29,8 @@ from pathlib import Path
 
 from app.settings import settings
 from app.utils.logging import get_logger
+from app.utils.retry import with_retry
+from app.utils.exceptions import ExternalServiceException
 
 logger = get_logger(__name__)
 
@@ -106,6 +108,12 @@ class StorageService:
             except Exception as e:
                 logger.warning(f"Could not create bucket (may already exist): {e}")
 
+    @with_retry(
+        max_attempts=3,
+        initial_delay=1.0,
+        max_delay=15.0,
+        circuit_breaker_name="supabase_storage"
+    )
     async def upload_order_pdf(
         self,
         order_id: str,
@@ -114,7 +122,7 @@ class StorageService:
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, str]:
         """
-        Upload print-ready PDF for an order.
+        Upload print-ready PDF for an order with retry logic.
 
         Args:
             order_id: Order UUID
@@ -132,38 +140,56 @@ class StorageService:
 
         storage_path = f"{self.PDF_FOLDER}/{order_id}/{book_id}_print.pdf"
 
-        # Upload PDF
-        with open(pdf_path, 'rb') as f:
-            self._client.storage.from_(self.BUCKET_NAME).upload(
+        try:
+            # Upload PDF
+            with open(pdf_path, 'rb') as f:
+                self._client.storage.from_(self.BUCKET_NAME).upload(
+                    path=storage_path,
+                    file=f,
+                    file_options={"content-type": "application/pdf"}
+                )
+
+            logger.info(f"Uploaded PDF to {storage_path}")
+
+            # Upload metadata if provided
+            if metadata:
+                meta_path = f"{self.PDF_FOLDER}/{order_id}/metadata.json"
+                metadata_bytes = json.dumps(metadata, indent=2).encode('utf-8')
+                self._client.storage.from_(self.BUCKET_NAME).upload(
+                    path=meta_path,
+                    file=metadata_bytes,
+                    file_options={"content-type": "application/json"}
+                )
+
+            # Generate signed URL (valid for 7 days)
+            signed_result = self._client.storage.from_(self.BUCKET_NAME).create_signed_url(
                 path=storage_path,
-                file=f,
-                file_options={"content-type": "application/pdf"}
+                expires_in=7 * 24 * 60 * 60  # 7 days in seconds
             )
 
-        logger.info(f"Uploaded PDF to {storage_path}")
-
-        # Upload metadata if provided
-        if metadata:
-            meta_path = f"{self.PDF_FOLDER}/{order_id}/metadata.json"
-            metadata_bytes = json.dumps(metadata, indent=2).encode('utf-8')
-            self._client.storage.from_(self.BUCKET_NAME).upload(
-                path=meta_path,
-                file=metadata_bytes,
-                file_options={"content-type": "application/json"}
+            return {
+                "storage_path": storage_path,
+                "signed_url": signed_result.get("signedURL"),
+                "uploaded_at": datetime.utcnow().isoformat()
+            }
+        except Exception as e:
+            error_msg = str(e).lower()
+            is_transient = any(
+                pattern in error_msg
+                for pattern in ['timeout', 'unavailable', '429', '503', 'connection']
+            )
+            raise ExternalServiceException(
+                service_name="Supabase Storage",
+                message=f"Failed to upload PDF: {str(e)}",
+                is_transient=is_transient
             )
 
-        # Generate signed URL (valid for 7 days)
-        signed_result = self._client.storage.from_(self.BUCKET_NAME).create_signed_url(
-            path=storage_path,
-            expires_in=7 * 24 * 60 * 60  # 7 days in seconds
-        )
-
-        return {
-            "storage_path": storage_path,
-            "signed_url": signed_result.get("signedURL"),
-            "uploaded_at": datetime.utcnow().isoformat()
-        }
-
+    @with_retry(
+        max_attempts=3,
+        initial_delay=1.0,
+        max_delay=10.0,
+        circuit_breaker_name="supabase_storage"
+    )
     async def get_order_pdf_url(
         self,
         order_id: str,
@@ -171,7 +197,7 @@ class StorageService:
         expiry_hours: int = 24
     ) -> Optional[str]:
         """
-        Get a fresh signed URL for an order's PDF.
+        Get a fresh signed URL for an order's PDF with retry logic.
 
         Args:
             order_id: Order UUID
@@ -193,8 +219,81 @@ class StorageService:
             )
             return result.get("signedURL")
         except Exception as e:
-            logger.error(f"Failed to get PDF URL: {e}")
-            return None
+            error_msg = str(e).lower()
+            is_transient = any(
+                pattern in error_msg
+                for pattern in ['timeout', 'unavailable', '429', '503', 'connection', 'not found', '404']
+            )
+            if '404' in error_msg or 'not found' in error_msg:
+                logger.warning(f"PDF not found: {storage_path}")
+                return None
+            
+            raise ExternalServiceException(
+                service_name="Supabase Storage",
+                message=f"Failed to get PDF URL: {str(e)}",
+                is_transient=is_transient
+            )
+
+    @with_retry(
+        max_attempts=3,
+        initial_delay=1.0,
+        max_delay=15.0,
+        circuit_breaker_name="supabase_storage"
+    )
+    async def _upload_single_print_image(
+        self,
+        book_id: str,
+        image_url: str,
+        page_number: int
+    ) -> str:
+        """
+        Upload a single print image with retry logic.
+
+        Args:
+            book_id: Book/story UUID
+            image_url: URL to download image from
+            page_number: Page number (1-indexed)
+
+        Returns:
+            Storage URL
+
+        Raises:
+            ExternalServiceException: If upload fails
+        """
+        try:
+            # Download image
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(image_url)
+                response.raise_for_status()
+                image_data = response.content
+
+            # Upload to storage
+            storage_path = f"{self.IMAGES_FOLDER}/print/{book_id}/page_{page_number}.jpg"
+            self._client.storage.from_(self.BUCKET_NAME).upload(
+                path=storage_path,
+                file=image_data,
+                file_options={"content-type": "image/jpeg"}
+            )
+
+            # Get public URL
+            public_url = self._client.storage.from_(self.BUCKET_NAME).get_public_url(
+                storage_path
+            )
+
+            logger.debug(f"Uploaded print image: {storage_path}")
+            return public_url
+
+        except Exception as e:
+            error_msg = str(e).lower()
+            is_transient = any(
+                pattern in error_msg
+                for pattern in ['timeout', 'unavailable', '429', '503', 'connection']
+            )
+            raise ExternalServiceException(
+                service_name="Supabase Storage",
+                message=f"Failed to upload image {page_number}: {str(e)}",
+                is_transient=is_transient
+            )
 
     async def upload_print_images(
         self,
@@ -217,37 +316,21 @@ class StorageService:
         self._ensure_bucket_exists()
         storage_urls = []
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for i, url in enumerate(image_urls):
-                if not url:
-                    storage_urls.append(None)
-                    continue
+        for i, url in enumerate(image_urls):
+            if not url:
+                storage_urls.append(None)
+                continue
 
-                try:
-                    # Download image
-                    response = await client.get(url)
-                    response.raise_for_status()
-                    image_data = response.content
-
-                    # Upload to storage
-                    storage_path = f"{self.IMAGES_FOLDER}/print/{book_id}/page_{i+1}.jpg"
-                    self._client.storage.from_(self.BUCKET_NAME).upload(
-                        path=storage_path,
-                        file=image_data,
-                        file_options={"content-type": "image/jpeg"}
-                    )
-
-                    # Get public URL
-                    public_url = self._client.storage.from_(self.BUCKET_NAME).get_public_url(
-                        storage_path
-                    )
-                    storage_urls.append(public_url)
-
-                    logger.debug(f"Uploaded print image: {storage_path}")
-
-                except Exception as e:
-                    logger.error(f"Failed to upload print image {i+1}: {e}")
-                    storage_urls.append(None)
+            try:
+                storage_url = await self._upload_single_print_image(
+                    book_id=book_id,
+                    image_url=url,
+                    page_number=i+1
+                )
+                storage_urls.append(storage_url)
+            except Exception as e:
+                logger.error(f"Failed to upload print image {i+1}: {e}")
+                storage_urls.append(None)
 
         return storage_urls
 

@@ -8,10 +8,12 @@ This service calls the external Supabase Edge Function to retrieve
 story and page data needed for PDF generation.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import httpx
+from pydantic import BaseModel
 
 from app.settings import settings
+from app.models.enums import BookTier
 from app.utils.logging import get_logger
 from app.utils.retry import with_retry
 from app.utils.exceptions import ExternalServiceException, NotFoundException
@@ -22,6 +24,80 @@ from app.models.pdf_models import (
 )
 
 logger = get_logger(__name__)
+
+
+# ============================================
+# PDF LAYOUT CONFIGURATION (Tier-aware)
+# ============================================
+
+class PDFLayoutConfig(BaseModel):
+    """Layout configuration per tier."""
+    tier: BookTier
+    full_page_images: bool = False      # Premium/Ultra: True
+    text_overlay: bool = False          # Premium/Ultra: True
+    text_box_opacity: float = 0.85
+    text_box_corner_radius: float = 10
+    emphasis_words_enabled: bool = False  # Premium/Ultra: detect and style
+    speech_bubbles_enabled: bool = False  # Premium/Ultra: True
+    emphasis_font_size: int = 22  # Larger size for emphasis words
+    body_font_size: int = 16
+    
+    @classmethod
+    def for_tier(cls, tier: BookTier) -> "PDFLayoutConfig":
+        """Create layout config for a specific tier."""
+        if tier == BookTier.BASIC:
+            return cls(
+                tier=tier,
+                full_page_images=False,
+                text_overlay=False,
+                emphasis_words_enabled=False,
+                speech_bubbles_enabled=False
+            )
+        elif tier in [BookTier.PREMIUM, BookTier.ULTRA]:
+            return cls(
+                tier=tier,
+                full_page_images=True,
+                text_overlay=True,
+                emphasis_words_enabled=True,
+                speech_bubbles_enabled=True
+            )
+        return cls(tier=tier)
+
+
+# Emphasis words for Premium/Ultra tiers
+EMPHASIS_WORDS = [
+    # Size/strength
+    "biggest", "strongest", "bravest", "fastest", "tallest", "smallest",
+    # Magic/special
+    "magic", "magical", "special", "amazing", "wonderful", "spectacular",
+    # Characters/themes
+    "monster truck", "superhero", "princess", "dragon", "unicorn",
+    # Events
+    "adventure", "journey", "quest", "mission",
+    "Christmas", "birthday", "surprise", "celebration",
+    # Emotions
+    "happy", "excited", "proud", "courageous", "kind", "helpful"
+]
+
+
+def detect_emphasis_words(text: str) -> List[str]:
+    """
+    Detect emphasis words in text for Premium/Ultra tier styling.
+    
+    Args:
+        text: The text content to analyze
+        
+    Returns:
+        List of emphasis words found in the text
+    """
+    text_lower = text.lower()
+    found_words = []
+    
+    for word in EMPHASIS_WORDS:
+        if word in text_lower:
+            found_words.append(word)
+    
+    return found_words
 
 
 class PDFDataService:

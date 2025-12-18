@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+from character_system import Gender, SkinTone, HairColor, HairStyle, EyeColor, BodyType
 
 
 @pytest.fixture
@@ -22,19 +23,36 @@ def sample_book_request():
     """Sample book creation request for testing."""
     return {
         "child_name": "Emma",
-        "child_gender": "girl",
+        "child_gender": Gender.GIRL.value,  # "girl"
         "child_age": 6,
-        "skin_tone": "LIGHT",
-        "hair_color": "BROWN",
-        "hair_style": "PIGTAILS",
-        "eye_color": "BLUE",
-        "body_type": "AVERAGE",
+        "skin_tone": SkinTone.LIGHT.value,  # "light skin"
+        "hair_color": HairColor.BROWN.value,  # "brown hair"
+        "hair_style": HairStyle.PIGTAILS.value,  # "hair in pigtails"
+        "eye_color": EyeColor.BLUE.value,  # "blue eyes"
+        "body_type": BodyType.AVERAGE.value,  # "average build"
         "has_glasses": False,
         "has_freckles": True,
         "has_dimples": False,
         "theme": "christmas",
         "art_style": "watercolor",
         "additional_characters": []
+    }
+
+
+def get_valid_character_data():
+    """Helper function to get valid character data with correct enum values."""
+    return {
+        "child_name": "Emma",
+        "child_gender": Gender.GIRL.value,
+        "child_age": 6,
+        "skin_tone": SkinTone.LIGHT.value,
+        "hair_color": HairColor.BROWN.value,
+        "hair_style": HairStyle.PIGTAILS.value,
+        "eye_color": EyeColor.BLUE.value,
+        "body_type": BodyType.AVERAGE.value,
+        "has_glasses": False,
+        "has_freckles": True,
+        "has_dimples": False,
     }
 
 

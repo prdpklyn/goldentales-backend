@@ -33,6 +33,7 @@ from app.utils.exceptions import GoldenTalesException
 
 # Import versioned routers
 from app.routers.v1 import router as v1_router
+from app.routers.v2 import v2_router
 from app.routers.common import router as common_router
 
 # Legacy routers (for backward compatibility during migration)
@@ -67,13 +68,65 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down GoldenTales API")
 
 
-# Create FastAPI app
+# Create FastAPI app with JWT Bearer token authentication
 app = FastAPI(
     title="GoldenTales API",
-    description="AI-powered personalized children's storybook generation with character consistency",
+    description="""
+    AI-powered personalized children's storybook generation with character consistency.
+    
+    ## Authentication
+    
+    V2 APIs require JWT Bearer token authentication:
+    1. Login via Supabase Auth to get a JWT token
+    2. Include token in `Authorization: Bearer <token>` header
+    
+    See `/docs` for interactive testing with Supabase login.
+    """,
     version="3.0.0",
     lifespan=lifespan
 )
+
+# Add JWT Bearer token authentication to OpenAPI schema
+from fastapi.security import HTTPBearer
+security_scheme = HTTPBearer()
+
+app.openapi_schema = None  # Force regeneration
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    from fastapi.openapi.utils import get_openapi
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    # Add JWT Bearer authentication
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT token from Supabase Auth. Get token by logging in via Supabase."
+        }
+    }
+    
+    # Apply JWT auth to V2 routes
+    for path, path_item in openapi_schema.get("paths", {}).items():
+        if "/api/v2/" in path or path.startswith("/api/v2/"):
+            for method in path_item.keys():
+                if method.lower() in ["get", "post", "put", "delete", "patch"]:
+                    if "security" not in path_item[method]:
+                        path_item[method]["security"] = [{"BearerAuth": []}]
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # Configure CORS
 # In development: allow all origins
@@ -178,12 +231,29 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     request_id = request.headers.get("X-Request-ID", "unknown")
     
     errors = exc.errors()
+    # Convert errors to JSON-serializable format
+    serializable_errors = []
+    for error in errors:
+        serializable_error = {
+            "loc": [str(loc) for loc in error.get("loc", [])],
+            "msg": str(error.get("msg", "")),
+            "type": str(error.get("type", ""))
+        }
+        if "ctx" in error:
+            # Convert context to string if it contains non-serializable objects
+            ctx = error["ctx"]
+            if isinstance(ctx, dict):
+                serializable_error["ctx"] = {k: str(v) for k, v in ctx.items()}
+            else:
+                serializable_error["ctx"] = str(ctx)
+        serializable_errors.append(serializable_error)
+    
     logger.warning(
         f"Validation error: {len(errors)} field(s) invalid",
         extra={
             "request_id": request_id,
             "path": request.url.path,
-            "errors": errors
+            "error_count": len(errors)
         }
     )
     
@@ -192,7 +262,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={
             "error": "validation_error",
             "message": "Request validation failed",
-            "details": errors
+            "details": serializable_errors
         },
         headers={"X-Request-ID": request_id}
     )
@@ -235,8 +305,12 @@ logger.info("Exception handlers configured")
 # =================================================================
 # Versioned API Routes (recommended)
 # =================================================================
-# New versioned endpoints: /api/v1/books/*, /api/v1/orders/*, etc.
+# V1 endpoints: /api/v1/books/*, /api/v1/orders/*, etc.
 app.include_router(v1_router, prefix="/api/v1")
+
+# V2 endpoints: /api/v2/books/*, /api/v2/photo/*, /api/v2/pricing/*
+# V2 adds Premium and Ultra tier support with photo-to-character
+app.include_router(v2_router)
 
 # =================================================================
 # Common Routes (version-agnostic)

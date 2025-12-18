@@ -39,6 +39,7 @@ python test_print_job.py --story-id "your-story-id-here"
 python test_print_job.py --story-id "your-story-id" --creative
 ```
 
+python test_print_job.py --story-id "5eb41ff4-6d98-47d0-a6ed-af5a81222a42" --creative
 ### What It Does
 
 1. ✅ Checks configuration (Supabase, Fal.ai)

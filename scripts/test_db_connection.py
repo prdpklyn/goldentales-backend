@@ -24,6 +24,9 @@ except ImportError as e:
     sys.exit(1)
 
 
+import pytest
+
+@pytest.mark.asyncio
 async def test_connection():
     """Test database connection."""
     database_url = settings.supabase_url

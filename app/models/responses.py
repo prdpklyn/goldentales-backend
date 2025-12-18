@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 
-from app.models.enums import OrderStatus
+from app.models.enums import OrderStatus, BookTier
 
 
 class PageResponse(BaseModel):
@@ -106,3 +106,52 @@ class HealthResponse(BaseModel):
     environment: str
     checks: Dict[str, bool]
     timestamp: str
+
+
+# ============================================
+# V2 API RESPONSE MODELS (Premium/Ultra Tiers)
+# ============================================
+
+class PhotoValidationResponse(BaseModel):
+    """Photo validation result."""
+    valid: bool
+    face_detected: bool
+    confidence: float
+    message: str
+    issues: List[str] = []
+
+
+class CharacterPreviewResponse(BaseModel):
+    """Character preview generation result."""
+    preview_id: str
+    original_photo_url: str
+    character_image_url: str
+    art_style: str
+    message: str
+    expires_at: Optional[str] = None  # Preview expiration time
+
+
+class ApprovalResponse(BaseModel):
+    """Character approval result."""
+    approved: bool
+    character_reference_url: str
+    message: str
+
+
+class BookResponseV2(BaseModel):
+    """V2 book response with tier information."""
+    book_id: str
+    title: str
+    tier: BookTier
+    child_name: str
+    child_age: int
+    theme: str
+    art_style: str
+    is_photo_based: bool = False
+    character_reference_url: Optional[str] = None
+    pages: List[PageResponse]
+    preview_images: List[str]
+    page_count: int
+    character_bible: Optional[Dict[str, Any]] = None
+    created_at: str
+    status: str = "preview"
