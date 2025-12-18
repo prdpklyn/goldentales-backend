@@ -12,7 +12,7 @@ from typing import List, Dict, Optional, Any
 from app.settings import settings
 from app.models.enums import GenerationQuality, BookTier
 from app.utils.logging import get_logger
-from app.utils.security import SAFETY_NEGATIVE_PROMPT
+from app.utils.security import SAFETY_NEGATIVE_PROMPT, ANATOMICAL_POSITIVE_GUIDANCE
 from app.utils.retry import with_retry
 from app.utils.exceptions import ExternalServiceException
 from character_system import CharacterDescriptionGenerator
@@ -210,8 +210,8 @@ COMPOSITION FOR FULL-PAGE LAYOUT:
             include_additional_characters=characters_in_scene
         )
         
-        # Add quality and consistency instructions
-        full_prompt += """
+        # Add quality, consistency, and anatomical correctness instructions
+        full_prompt += f"""
 
 CRITICAL CONSISTENCY RULES:
 - Character's face, hair, skin tone, and features must match the description EXACTLY
@@ -219,6 +219,19 @@ CRITICAL CONSISTENCY RULES:
 - Maintain exact hair color, style, and length
 - Keep any accessories (glasses, bows, etc.) consistent
 - Same clothing style/colors throughout
+
+ANATOMICAL REQUIREMENTS (VERY IMPORTANT):
+- Character must have exactly TWO hands with FIVE fingers each
+- Character must have exactly ONE head, properly connected to body
+- Natural, relaxed pose with correct body proportions
+- Arms and hands must be clearly connected to body
+- No floating or disconnected body parts
+- Proper perspective and foreshortening
+
+COMPOSITION:
+- Single clear focal point on the main character
+- Character fully visible in frame (not cropped awkwardly)
+- {ANATOMICAL_POSITIVE_GUIDANCE}
 
 OUTPUT: High-quality children's book illustration, professional, vibrant, safe for all ages.
 """
@@ -243,9 +256,9 @@ OUTPUT: High-quality children's book illustration, professional, vibrant, safe f
         if "guidance_scale" in config:
             params["guidance_scale"] = config["guidance_scale"]
         
-        # Add negative prompt for higher quality
-        if quality != GenerationQuality.PREVIEW:
-            params["negative_prompt"] = SAFETY_NEGATIVE_PROMPT
+        # ALWAYS add negative prompt to prevent anatomical issues (extra hands, etc.)
+        # This is critical for all quality levels including preview
+        params["negative_prompt"] = SAFETY_NEGATIVE_PROMPT
         
         try:
             logger.info(f"Generating page {page_number} with {quality.value} quality")
@@ -389,8 +402,8 @@ OUTPUT: High-quality children's book illustration, professional, vibrant, safe f
         if tier in [BookTier.PREMIUM, BookTier.ULTRA]:
             full_prompt += f"\n\n{self.FULL_PAGE_COMPOSITION}"
         
-        # Add consistency rules
-        full_prompt += """
+        # Add consistency rules and anatomical guidance
+        full_prompt += f"""
 
 CRITICAL CONSISTENCY RULES:
 - Character's face, hair, skin tone, and features must match the description EXACTLY
@@ -398,6 +411,19 @@ CRITICAL CONSISTENCY RULES:
 - Maintain exact hair color, style, and length
 - Keep any accessories (glasses, bows, etc.) consistent
 - Same clothing style/colors throughout
+
+ANATOMICAL REQUIREMENTS (VERY IMPORTANT):
+- Character must have exactly TWO hands with FIVE fingers each
+- Character must have exactly ONE head, properly connected to body
+- Natural, relaxed pose with correct body proportions
+- Arms and hands must be clearly connected to body
+- No floating or disconnected body parts
+- Proper perspective and foreshortening
+
+COMPOSITION:
+- Single clear focal point on the main character
+- Character fully visible in frame (not cropped awkwardly)
+- {ANATOMICAL_POSITIVE_GUIDANCE}
 
 OUTPUT: High-quality children's book illustration, professional, vibrant, safe for all ages.
 """
@@ -430,9 +456,9 @@ OUTPUT: High-quality children's book illustration, professional, vibrant, safe f
             params["ip_adapter_image_url"] = character_reference_url
             params["ip_adapter_scale"] = 0.7  # Strong influence from reference
         
-        # Add negative prompt
-        if quality != GenerationQuality.PREVIEW:
-            params["negative_prompt"] = SAFETY_NEGATIVE_PROMPT
+        # ALWAYS add negative prompt to prevent anatomical issues (extra hands, etc.)
+        # This is critical for all quality levels including preview
+        params["negative_prompt"] = SAFETY_NEGATIVE_PROMPT
         
         try:
             logger.info(f"Generating {tier.value} tier page {page_number} with {quality.value} quality")

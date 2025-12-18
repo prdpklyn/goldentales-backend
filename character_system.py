@@ -359,7 +359,16 @@ class CharacterDescriptionGenerator:
             
             # 5. Quality and safety
             "\nQUALITY: Professional children's book illustration, high detail, clear focal point",
-            "IMPORTANT: Character appearance must remain EXACTLY consistent - same face, hair, clothes, features"
+            "IMPORTANT: Character appearance must remain EXACTLY consistent - same face, hair, clothes, features",
+            
+            # 6. Anatomical correctness (CRITICAL for avoiding extra hands/heads)
+            "\nANATOMY RULES:",
+            "- Exactly TWO hands, each with FIVE fingers",
+            "- Exactly ONE head, properly attached to shoulders",
+            "- Natural pose with correct body proportions",
+            "- Clear separation between character and background",
+            "- No overlapping or merged body parts",
+            "- Arms connect naturally to torso, hands connect to arms"
         ])
         
         return "\n".join(prompt_parts)

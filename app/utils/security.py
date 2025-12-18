@@ -152,9 +152,47 @@ def validate_content_safety(text: str) -> tuple[bool, Optional[str]]:
 
 
 # Safety negative prompt for image generation
+# Comprehensive negative prompts to prevent anatomical issues and ensure quality
 SAFETY_NEGATIVE_PROMPT = (
+    # Content safety
     "nsfw, nude, naked, violence, blood, gore, scary, horror, dark, "
     "disturbing, frightening, adult content, inappropriate, suggestive, "
-    "disfigured, deformed, ugly, mutated, bad anatomy, extra limbs, "
-    "blurry, low quality, watermark, text, signature"
+    
+    # ANATOMICAL - Hands (critical for preventing extra hands/fingers)
+    "extra hands, multiple hands, extra fingers, too many fingers, missing fingers, "
+    "fused fingers, mutated hands, malformed hands, bad hands, wrong hands, "
+    "floating hands, disconnected hands, extra arms, multiple arms, "
+    "six fingers, seven fingers, four fingers, "
+    
+    # ANATOMICAL - Head and Face
+    "extra heads, two heads, multiple heads, split head, merged faces, "
+    "disfigured face, deformed face, mutated face, ugly face, bad face, "
+    "wrong facial proportions, asymmetrical face, cropped head, cut off head, "
+    "floating head, disconnected head, neck too long, neck too short, "
+    
+    # ANATOMICAL - Body
+    "extra limbs, missing limbs, fused limbs, bad anatomy, wrong anatomy, "
+    "mutated body, disfigured body, malformed body, bad proportions, "
+    "body out of frame, poorly drawn body, extra legs, missing legs, "
+    "merged bodies, conjoined, duplicate body parts, "
+    
+    # ANATOMICAL - Pose and Composition
+    "anatomically incorrect, impossible pose, twisted limbs, contorted body, "
+    "unnatural pose, awkward pose, broken anatomy, "
+    
+    # Quality issues
+    "blurry, low quality, lowres, bad quality, worst quality, jpeg artifacts, "
+    "pixelated, grainy, noisy, watermark, text, signature, logo, "
+    "poorly drawn, amateur, sketch, unfinished, draft, "
+    
+    # Style issues
+    "realistic photo, photograph, photorealistic, 3d render, cgi, "
+    "out of focus, motion blur, chromatic aberration"
+)
+
+# Anatomical correctness positive guidance (to be added to prompts)
+ANATOMICAL_POSITIVE_GUIDANCE = (
+    "anatomically correct, proper body proportions, correct number of limbs, "
+    "two hands with five fingers each, natural pose, well-formed features, "
+    "proper head placement, correct facial features, natural body position"
 )
