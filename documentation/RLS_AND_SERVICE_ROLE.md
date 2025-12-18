@@ -140,3 +140,4 @@ But this is more complex and service_role is the recommended approach for backen
 
 Just add `SUPABASE_SERVICE_ROLE_KEY` to your `.env` file and you're good to go! 🚀
 
+

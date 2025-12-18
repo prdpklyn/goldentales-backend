@@ -69,6 +69,23 @@ class DatabaseEdgeService:
     # STORY OPERATIONS
     # ==========================================
     
+    def _normalize_status_for_db(self, status: Optional[str]) -> Optional[str]:
+        """
+        Map application statuses to database-allowed statuses.
+
+        DB constraint allows: draft, generating, ready, failed.
+        The app uses 'preview' to indicate a pre-final state; map it to 'ready'
+        to satisfy the constraint while preserving downstream behavior.
+        """
+        if status is None:
+            return None
+
+        if status == "preview":
+            logger.debug("Mapped 'preview' status to 'ready' for database compatibility")
+            return "ready"
+
+        return status
+
     async def create_story(
         self,
         user_id: str,
@@ -117,6 +134,10 @@ class DatabaseEdgeService:
             "friends": friends,
             **kwargs
         }
+
+        # Normalize status if provided via kwargs
+        if "status" in payload:
+            payload["status"] = self._normalize_status_for_db(payload.get("status"))
         
         response = await self._clients["create-story"].call(payload, auth_token=auth_token)
         
@@ -169,19 +190,100 @@ class DatabaseEdgeService:
         Returns:
             Updated story data or None if not found
         """
-        payload = {
-            "story_id": story_id,
-            "updates": updates
+        # Valid fields in the stories table (based on schema)
+        VALID_STORY_FIELDS = {
+            "child_name", "child_age", "theme", "art_style", "character_json",
+            "gender", "skin_tone", "hair_color", "hair_style", "eye_color",
+            "occasion", "special_details", "photo_url", "status", "cover_image_url",
+            "error_json", "tier", "is_photo_based", "character_reference_url",
+            "siblings", "favorite_characters", "pets", "parents", "friends"
         }
         
-        response = await self._clients["update-story"].call(payload, auth_token=auth_token)
+        # Immutable fields that cannot be updated
+        IMMUTABLE_FIELDS = {"id", "user_id", "created_at", "updated_at"}
         
-        if response.get("success"):
-            logger.info(f"Updated story via Edge Function: {story_id}")
-            return response.get("data")
-        else:
-            logger.warning(f"Failed to update story {story_id}")
+        # Map character_bible to character_json (database field name)
+        # The codebase uses 'character_bible' but database uses 'character_json'
+        normalized_updates = updates.copy()
+        if "character_bible" in normalized_updates:
+            normalized_updates["character_json"] = normalized_updates.pop("character_bible")
+            logger.debug("Mapped character_bible to character_json for database update")
+            
+        # Map V2 'preview' status to database 'ready' status (constraint-safe)
+        if "status" in normalized_updates:
+            normalized_updates["status"] = self._normalize_status_for_db(normalized_updates.get("status"))
+        
+        # Filter out invalid fields
+        filtered_updates = {}
+        invalid_fields = []
+        for key, value in normalized_updates.items():
+            if key in IMMUTABLE_FIELDS:
+                logger.warning(f"Skipping immutable field '{key}' in update for story {story_id}")
+                continue
+            elif key not in VALID_STORY_FIELDS:
+                invalid_fields.append(key)
+                logger.warning(f"Skipping invalid field '{key}' in update for story {story_id}")
+                continue
+            else:
+                # Ensure JSONB fields are properly formatted (dict/list, not string)
+                if key in ("character_json", "error_json") and isinstance(value, str):
+                    try:
+                        import json
+                        value = json.loads(value)
+                    except json.JSONDecodeError:
+                        logger.error(f"Invalid JSON string for field '{key}' in story {story_id}")
+                        continue
+                # Ensure status respects DB constraint
+                if key == "status":
+                    value = self._normalize_status_for_db(value)
+                filtered_updates[key] = value
+        
+        if invalid_fields:
+            logger.warning(
+                f"Filtered out {len(invalid_fields)} invalid fields for story {story_id}: {invalid_fields}"
+            )
+        
+        if not filtered_updates:
+            logger.error(f"No valid fields to update for story {story_id}")
             return None
+        
+        payload = {
+            "story_id": story_id,
+            "updates": filtered_updates
+        }
+        
+        logger.debug(
+            f"Updating story {story_id} with {len(filtered_updates)} fields: {list(filtered_updates.keys())}"
+        )
+        
+        try:
+            response = await self._clients["update-story"].call(payload, auth_token=auth_token)
+            
+            if response.get("success"):
+                logger.info(f"Updated story via Edge Function: {story_id}")
+                return response.get("data")
+            else:
+                error_msg = response.get("error", "Unknown error")
+                error_code = response.get("error_code", "unknown")
+                logger.error(
+                    f"Failed to update story {story_id}: {error_msg} (code: {error_code})",
+                    extra={
+                        "story_id": story_id,
+                        "updates": list(filtered_updates.keys()),
+                        "invalid_fields": invalid_fields
+                    }
+                )
+                return None
+        except Exception as e:
+            logger.error(
+                f"Exception updating story {story_id} via Edge Function: {e}",
+                extra={
+                    "story_id": story_id,
+                    "updates": list(filtered_updates.keys()),
+                    "invalid_fields": invalid_fields
+                }
+            )
+            raise
     
     # ==========================================
     # PAGE OPERATIONS

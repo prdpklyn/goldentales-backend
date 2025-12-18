@@ -146,9 +146,22 @@ class EdgeFunctionClient:
                     )
                 
                 if response.status_code >= 500:
+                    # Try to extract error details from response
+                    error_details = "Unknown server error"
+                    try:
+                        error_data = response.json()
+                        error_details = error_data.get("error", error_data.get("message", str(error_data)))
+                    except:
+                        error_details = response.text[:200] if response.text else "No error details"
+                    
+                    logger.error(
+                        f"Edge Function {self.function_name} returned {response.status_code}: {error_details}",
+                        extra={"function": self.function_name, "status": response.status_code}
+                    )
+                    
                     raise ExternalServiceException(
                         service_name=f"Edge Function: {self.function_name}",
-                        message=f"Server error: {response.status_code}",
+                        message=f"Server error: {response.status_code}. {error_details}",
                         is_transient=True
                     )
                 
