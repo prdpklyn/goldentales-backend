@@ -10,7 +10,7 @@ This document describes the V2 Preview API endpoints implemented for the Kids "6
 
 **Purpose**: Generate a quick preview (cover + hero portrait + 2 spreads) in under 60 seconds.
 
-**Authentication**: JWT Bearer token required
+**Authentication**: X-API-Key header required (public endpoint)
 
 **Request**:
 ```json
@@ -70,7 +70,7 @@ This document describes the V2 Preview API endpoints implemented for the Kids "6
 
 **Purpose**: Generate 3 artistic style variants (A, B, C) that preserve photo likeness.
 
-**Authentication**: JWT Bearer token required
+**Authentication**: JWT Bearer token required (user-specific endpoint)
 
 **Request**:
 ```json
@@ -147,7 +147,7 @@ This document describes the V2 Preview API endpoints implemented for the Kids "6
 
 **Purpose**: Quickly regenerate preview with user tweaks applied.
 
-**Authentication**: JWT Bearer token required
+**Authentication**: X-API-Key header required (public endpoint)
 
 **Request**:
 ```json
@@ -323,31 +323,54 @@ pytest tests/test_preview_api.py -v
 
 ---
 
-## Migration from Specifications
+## Authentication
 
-The implementation follows the provided Railway API V2 specifications with one key difference:
+The API uses **two authentication methods** depending on the endpoint:
 
-### Authentication Change
+### Preview Endpoints (X-API-Key)
 
-**Specification**: `x-api-key` header authentication
-**Implementation**: JWT Bearer token authentication
+**Public endpoints** that use API key authentication:
+- `POST /api/v2/preview/quick`
+- `POST /api/v2/preview/regenerate`
+- `GET /api/v2/preview/{preview_id}`
 
-**Reason**: The existing V2 API already uses JWT Bearer tokens via Supabase Auth. For consistency and to leverage existing authentication infrastructure, JWT tokens are used instead of API keys.
-
-**Frontend Migration**:
+**Usage**:
 ```javascript
-// Specification (NOT used):
 headers: {
-  'x-api-key': RAILWAY_API_KEY
+  'Content-Type': 'application/json',
+  'X-API-Key': 'your_api_key_here'
 }
+```
 
-// Implementation (CURRENT):
+**Why API Key?** These endpoints generate public previews and don't need user-specific data or authentication. They're designed for frontend preview flows before user signup.
+
+### Other V2 Endpoints (JWT Bearer)
+
+**User-specific endpoints** that use JWT authentication:
+- `POST /api/v2/books/create`
+- `POST /api/v2/photo/validate`
+- `POST /api/v2/photo/likeness-variants`
+
+**Usage**:
+```javascript
 headers: {
+  'Content-Type': 'application/json',
   'Authorization': `Bearer ${supabaseJwtToken}`
 }
 ```
 
-All other aspects match the specifications exactly.
+**Why JWT?** These endpoints create resources tied to specific user accounts and require authentication via Supabase Auth.
+
+### Getting an API Key
+
+**Development**:
+```bash
+# Add to .env
+DEV_API_KEY=gt_dev_test_key_12345
+```
+
+**Production**:
+Contact support to get a production API key with appropriate rate limits.
 
 ---
 

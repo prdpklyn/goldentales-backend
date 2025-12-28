@@ -3,15 +3,17 @@
 GoldenTales V2 Preview Router
 ===============================
 Fast preview generation endpoints for the Kids 60s Magic Preview flow.
+
+These endpoints are PUBLIC and only require API key authentication (not JWT).
 """
 
-from typing import Dict
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Dict, Optional
+from fastapi import APIRouter, HTTPException, Depends, Header
 
 from app.models.requests import QuickPreviewRequest, PreviewRegenerateRequest
 from app.models.responses import QuickPreviewResponse, PreviewRegenerateResponse
 from app.services.preview_service import PreviewService
-from app.middleware.jwt_auth import require_jwt_auth, JWTUser
+from app.middleware.auth import APIKeyData, get_api_key_validator
 from app.utils.logging import get_logger
 from app.utils.exceptions import ValidationException, ExternalServiceException
 
@@ -20,16 +22,44 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/preview", tags=["Preview"])
 
 
+async def require_api_key(x_api_key: Optional[str] = Header(None)) -> APIKeyData:
+    """
+    Dependency to validate API key from X-API-Key header.
+
+    Preview endpoints are public and only require API key (not JWT).
+    """
+    if not x_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing API key. Include X-API-Key header.",
+            headers={"WWW-Authenticate": "ApiKey"}
+        )
+
+    validator = get_api_key_validator()
+    api_key_data = await validator.validate(x_api_key)
+
+    if not api_key_data:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or inactive API key",
+            headers={"WWW-Authenticate": "ApiKey"}
+        )
+
+    return api_key_data
+
+
 @router.post("/quick", response_model=QuickPreviewResponse)
 async def quick_preview(
     request: QuickPreviewRequest,
-    user: JWTUser = Depends(require_jwt_auth)
+    api_key: APIKeyData = Depends(require_api_key)
 ) -> QuickPreviewResponse:
     """
     Generate a quick preview (cover + hero portrait + 2 spreads) in under 60 seconds.
 
     This endpoint generates a minimal preview to give users a feel for the book
     before they provide full character details or upload photos.
+
+    **Authentication**: Requires X-API-Key header
 
     **Performance**: Must complete in < 60 seconds
     - Cover generation: ~15s
@@ -39,17 +69,18 @@ async def quick_preview(
 
     Args:
         request: Quick preview request with minimal character info
-        user: Authenticated user
+        api_key: Validated API key data
 
     Returns:
         QuickPreviewResponse with preview data
 
     Raises:
+        401: Missing or invalid API key
         400: Invalid request or validation failed
         503: AI service temporarily unavailable
         500: Internal server error
     """
-    logger.info(f"Quick preview requested by {user.user_id} for {request.child_name}")
+    logger.info(f"Quick preview requested for {request.child_name} (session: {request.session_id})")
 
     try:
         service = PreviewService()
@@ -82,10 +113,12 @@ async def quick_preview(
 @router.post("/regenerate", response_model=PreviewRegenerateResponse)
 async def regenerate_preview(
     request: PreviewRegenerateRequest,
-    user: JWTUser = Depends(require_jwt_auth)
+    api_key: APIKeyData = Depends(require_api_key)
 ) -> PreviewRegenerateResponse:
     """
     Quickly regenerate preview with user tweaks applied.
+
+    **Authentication**: Requires X-API-Key header
 
     **Performance**: Must complete in < 15 seconds
     - Only regenerates hero + 2 spreads
@@ -98,12 +131,13 @@ async def regenerate_preview(
 
     Args:
         request: Regeneration request with preview_id and tweaks
-        user: Authenticated user
+        api_key: Validated API key data
 
     Returns:
         PreviewRegenerateResponse with updated preview
 
     Raises:
+        401: Missing or invalid API key
         404: Preview not found or expired
         400: Invalid request
         500: Regeneration failed
@@ -136,19 +170,22 @@ async def regenerate_preview(
 @router.get("/{preview_id}")
 async def get_preview_status(
     preview_id: str,
-    user: JWTUser = Depends(require_jwt_auth)
+    api_key: APIKeyData = Depends(require_api_key)
 ) -> Dict:
     """
     Get the status of a preview session.
 
+    **Authentication**: Requires X-API-Key header
+
     Args:
         preview_id: Preview session ID
-        user: Authenticated user
+        api_key: Validated API key data
 
     Returns:
         Preview session details
 
     Raises:
+        401: Missing or invalid API key
         404: Preview not found or expired
     """
     logger.info(f"Getting preview status: {preview_id}")

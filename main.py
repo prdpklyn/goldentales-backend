@@ -105,23 +105,34 @@ def custom_openapi():
         routes=app.routes,
     )
     
-    # Add JWT Bearer authentication
+    # Add authentication schemes
     openapi_schema["components"]["securitySchemes"] = {
         "BearerAuth": {
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
             "description": "JWT token from Supabase Auth. Get token by logging in via Supabase."
+        },
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-Key",
+            "description": "API key for public preview endpoints. Contact support to get an API key."
         }
     }
-    
-    # Apply JWT auth to V2 routes
+
+    # Apply authentication to V2 routes
     for path, path_item in openapi_schema.get("paths", {}).items():
         if "/api/v2/" in path or path.startswith("/api/v2/"):
             for method in path_item.keys():
                 if method.lower() in ["get", "post", "put", "delete", "patch"]:
                     if "security" not in path_item[method]:
-                        path_item[method]["security"] = [{"BearerAuth": []}]
+                        # Preview endpoints use API key auth
+                        if "/preview" in path:
+                            path_item[method]["security"] = [{"ApiKeyAuth": []}]
+                        else:
+                            # Other V2 endpoints use JWT auth
+                            path_item[method]["security"] = [{"BearerAuth": []}]
     
     app.openapi_schema = openapi_schema
     return app.openapi_schema
