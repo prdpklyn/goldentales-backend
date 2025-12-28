@@ -216,3 +216,111 @@ class CreateBookV2Request(BaseModel):
         if info.data.get('tier') == BookTier.ULTRA and not v:
             raise ValueError('ULTRA tier requires character_reference_url from approved preview')
         return v
+
+
+# ============================================
+# PREVIEW API REQUEST MODELS (Kids Flow)
+# ============================================
+
+class QuickPreviewRequest(BaseModel):
+    """Request for quick 60s preview generation."""
+    child_name: str = Field(..., min_length=1, max_length=50, description="Child's name")
+    child_gender: str = Field(..., description="One of: boy, girl, they")
+    age_band: str = Field(..., description="One of: 3-5, 6-8, 9-12")
+    theme: str = Field(..., description="One of: space, dinosaur, ocean, forest, superhero")
+    photo_url: Optional[str] = Field(None, description="URL to uploaded photo for initial likeness")
+    session_id: str = Field(..., description="Session tracking ID")
+
+    @field_validator('child_gender')
+    @classmethod
+    def validate_gender(cls, v: str) -> str:
+        """Validate gender options."""
+        allowed = ['boy', 'girl', 'they']
+        if v not in allowed:
+            raise ValueError(f'child_gender must be one of: {", ".join(allowed)}')
+        return v
+
+    @field_validator('age_band')
+    @classmethod
+    def validate_age_band(cls, v: str) -> str:
+        """Validate age band options."""
+        allowed = ['3-5', '6-8', '9-12']
+        if v not in allowed:
+            raise ValueError(f'age_band must be one of: {", ".join(allowed)}')
+        return v
+
+    @field_validator('theme')
+    @classmethod
+    def validate_theme(cls, v: str) -> str:
+        """Validate theme options."""
+        allowed = ['space', 'dinosaur', 'ocean', 'forest', 'superhero']
+        if v not in allowed:
+            raise ValueError(f'theme must be one of: {", ".join(allowed)}')
+        return v
+
+
+class LikenessVariantsRequest(BaseModel):
+    """Request for photo likeness variant generation."""
+    photo_url: str = Field(..., description="URL to uploaded photo")
+    art_style: str = Field(..., description="One of: watercolor, cartoon, storybook, anime")
+    child_name: str = Field(..., min_length=1, max_length=50)
+    child_gender: str = Field(..., description="One of: boy, girl, they")
+    age_band: str = Field(..., description="One of: 3-5, 6-8, 9-12")
+    num_variants: int = Field(default=3, ge=1, le=5, description="Number of variants (1-5)")
+
+    @field_validator('art_style')
+    @classmethod
+    def validate_art_style(cls, v: str) -> str:
+        """Validate art style options."""
+        allowed = ['watercolor', 'cartoon', 'storybook', 'anime']
+        if v not in allowed:
+            raise ValueError(f'art_style must be one of: {", ".join(allowed)}')
+        return v
+
+    @field_validator('child_gender')
+    @classmethod
+    def validate_gender(cls, v: str) -> str:
+        """Validate gender options."""
+        allowed = ['boy', 'girl', 'they']
+        if v not in allowed:
+            raise ValueError(f'child_gender must be one of: {", ".join(allowed)}')
+        return v
+
+    @field_validator('age_band')
+    @classmethod
+    def validate_age_band(cls, v: str) -> str:
+        """Validate age band options."""
+        allowed = ['3-5', '6-8', '9-12']
+        if v not in allowed:
+            raise ValueError(f'age_band must be one of: {", ".join(allowed)}')
+        return v
+
+
+class PreviewRegenerateRequest(BaseModel):
+    """Request for quick preview regeneration with tweaks."""
+    preview_id: str = Field(..., description="Preview ID from initial generation")
+    character_reference_url: Optional[str] = Field(None, description="URL to selected likeness variant")
+    tweaks: Optional[Dict[str, str]] = Field(
+        None,
+        description="Optional tweaks: tone (funny/gentle/adventurous), art_modifier (softer/brighter/detailed), sidekick (dog/unicorn/robot/none)"
+    )
+
+    @field_validator('tweaks')
+    @classmethod
+    def validate_tweaks(cls, v: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
+        """Validate tweak options."""
+        if v is None:
+            return v
+
+        allowed_tones = ['funny', 'gentle', 'adventurous']
+        allowed_art_modifiers = ['softer', 'brighter', 'detailed']
+        allowed_sidekicks = ['dog', 'unicorn', 'robot', 'none']
+
+        if 'tone' in v and v['tone'] not in allowed_tones:
+            raise ValueError(f'tone must be one of: {", ".join(allowed_tones)}')
+        if 'art_modifier' in v and v['art_modifier'] not in allowed_art_modifiers:
+            raise ValueError(f'art_modifier must be one of: {", ".join(allowed_art_modifiers)}')
+        if 'sidekick' in v and v['sidekick'] not in allowed_sidekicks:
+            raise ValueError(f'sidekick must be one of: {", ".join(allowed_sidekicks)}')
+
+        return v

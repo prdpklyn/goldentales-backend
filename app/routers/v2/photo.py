@@ -9,14 +9,15 @@ from typing import Dict
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.utils.logging import get_logger
-from app.utils.exceptions import ExternalServiceException
+from app.utils.exceptions import ExternalServiceException, ValidationException
 from app.services.photo_character_service import get_photo_character_service
 from app.middleware.jwt_auth import require_jwt_auth, JWTUser
-from app.models.requests import ValidatePhotoRequest, PreviewCharacterRequest
+from app.models.requests import ValidatePhotoRequest, PreviewCharacterRequest, LikenessVariantsRequest
 from app.models.responses import (
     PhotoValidationResponse,
     CharacterPreviewResponse,
-    ApprovalResponse
+    ApprovalResponse,
+    LikenessVariantsResponse
 )
 
 logger = get_logger(__name__)
@@ -158,6 +159,72 @@ async def approve_character(
         raise HTTPException(status_code=500, detail="Failed to approve character")
 
 
+@router.post("/likeness-variants", response_model=LikenessVariantsResponse)
+async def generate_likeness_variants(
+    request: LikenessVariantsRequest,
+    user: JWTUser = Depends(require_jwt_auth)
+) -> LikenessVariantsResponse:
+    """
+    Generate 3 artistic style variants (A, B, C) that preserve photo likeness.
+
+    This endpoint generates multiple style variants from a single photo,
+    allowing users to choose the best likeness match before proceeding.
+
+    **Performance**: Must complete in < 15 seconds
+    - Face detection: ~1s
+    - 3 variants in parallel: ~10s
+    - Post-processing: ~4s
+
+    **Variant Labels**:
+    - A: Warm, expressive with soft edges
+    - B: Soft, dreamy with gentle tones
+    - C: Bold, vibrant with rich colors
+
+    Args:
+        request: Likeness variants request with photo and style details
+        user: Authenticated user
+
+    Returns:
+        LikenessVariantsResponse with 3 style variants
+
+    Raises:
+        400: Invalid photo URL or validation failed
+        422: No face detected in photo
+        500: Internal server error
+    """
+    logger.info(f"Likeness variants requested by {user.user_id} for {request.child_name}")
+
+    try:
+        service = get_photo_character_service()
+
+        # Generate variants
+        result = await service.generate_likeness_variants(
+            photo_url=request.photo_url,
+            art_style=request.art_style,
+            child_name=request.child_name,
+            child_gender=request.child_gender,
+            age_band=request.age_band,
+            num_variants=request.num_variants
+        )
+
+        logger.info(f"Generated {len(result['variants'])} likeness variants")
+
+        return LikenessVariantsResponse(**result)
+
+    except ValidationException as e:
+        logger.warning(f"Validation error: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
+    except ValueError as e:
+        logger.warning(f"Invalid request: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except ExternalServiceException as e:
+        logger.error(f"External service error: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error generating variants: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate likeness variants")
+
+
 @router.get("/preview/{preview_id}")
 async def get_preview_status(
     preview_id: str,
@@ -165,27 +232,27 @@ async def get_preview_status(
 ) -> Dict:
     """
     Get the status of a character preview session.
-    
+
     Args:
         preview_id: ID of the preview session
-        
+
     Returns:
         Preview session details
-        
+
     Raises:
         404: Preview not found or expired
     """
     logger.info(f"Getting preview status: {preview_id}")
-    
+
     try:
         service = get_photo_character_service()
         session = service.get_preview_session(preview_id)
-        
+
         if not session:
             raise HTTPException(status_code=404, detail="Preview not found or expired")
-        
+
         return session
-        
+
     except HTTPException:
         raise
     except Exception as e:

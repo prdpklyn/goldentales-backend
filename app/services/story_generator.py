@@ -244,5 +244,87 @@ IMPORTANT: scene_description MUST start with the character's appearance every ti
                 # If character description isn't prominent, prepend it
                 if main_char_short and main_char_short not in desc:
                     page['scene_description'] = f"{main_char_full}. {desc}"
-        
+
         return story_pages
+
+    async def generate_preview_story(
+        self,
+        character_bible: Dict[str, str],
+        child_name: str,
+        age: int,
+        theme: str,
+        num_pages: int = 2
+    ) -> List[Dict]:
+        """
+        Generate a SHORT story for quick preview (2-3 pages).
+
+        Args:
+            character_bible: Character description dictionary
+            child_name: Name of the main character
+            age: Age of the child
+            theme: Story theme
+            num_pages: Number of pages to generate (default: 2)
+
+        Returns:
+            List of page dictionaries
+        """
+        import google.generativeai as genai
+
+        if not self.api_key:
+            raise ValueError("Gemini API key not configured")
+
+        genai.configure(api_key=self.api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+
+        theme_elements = self.THEME_ELEMENTS.get(theme, '')
+
+        prompt = f"""
+You are creating a SHORT {num_pages}-page preview of a children's storybook.
+
+=== MAIN CHARACTER ===
+{character_bible.get('main_character', f'{child_name}, {age}-year-old child')}
+
+=== STORY SETTINGS ===
+Theme: {theme.upper()} - {theme_elements}
+
+=== REQUIREMENTS ===
+1. {child_name} is the HERO
+2. Each page: 2-3 sentences (20-35 words max)
+3. Simple vocabulary for age {age}
+4. {num_pages} pages total: exciting opening and action
+5. CRITICAL: In scene_description, ALWAYS include the main character's full appearance
+
+=== OUTPUT FORMAT ===
+Return ONLY a JSON array with exactly {num_pages} pages:
+[
+  {{
+    "page_number": 1,
+    "text": "Story text...",
+    "scene_description": "{child_name}'s full appearance. Scene details.",
+    "character_action": "What {child_name} is doing",
+    "mood": "happy/excited/curious/brave",
+    "characters_in_scene": ["{child_name}"]
+  }}
+]
+"""
+
+        try:
+            logger.info(f"Generating {num_pages}-page preview story for {child_name}")
+            response_text = await self._call_gemini_with_retry(prompt)
+
+            # Parse JSON response
+            story_pages = parse_story_json(response_text)
+
+            # Enhance scene descriptions
+            story_pages = self._enhance_scene_descriptions(story_pages, character_bible)
+
+            logger.info(f"Generated {len(story_pages)} preview pages")
+            return story_pages[:num_pages]
+
+        except Exception as e:
+            logger.error(f"Preview story generation failed: {e}")
+            raise ExternalServiceException(
+                service_name="Gemini AI",
+                message=f"Preview story generation failed: {str(e)}",
+                is_transient=False
+            )

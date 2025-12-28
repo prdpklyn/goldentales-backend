@@ -155,3 +155,104 @@ class BookResponseV2(BaseModel):
     character_bible: Optional[Dict[str, Any]] = None
     created_at: str
     status: str = "preview"
+
+
+# ============================================
+# PREVIEW API RESPONSE MODELS (Kids Flow)
+# ============================================
+
+class CoverImageResponse(BaseModel):
+    """Cover image with metadata."""
+    image_url: str
+    prompt_used: str
+
+
+class HeroPortraitResponse(BaseModel):
+    """Hero portrait with placeholder indicator."""
+    image_url: str
+    is_placeholder: bool
+
+
+class PreviewSpreadResponse(BaseModel):
+    """Single preview spread (page)."""
+    page_number: int
+    image_url: str
+    text: str
+
+
+class PreviewMetadataResponse(BaseModel):
+    """Preview generation metadata."""
+    generation_time_ms: int
+    model_version: str = "v2.1"
+    art_style: str
+
+
+class QuickPreviewResponse(BaseModel):
+    """Quick preview generation result."""
+    preview_id: str
+    title: str
+    cover: CoverImageResponse
+    hero_portrait: HeroPortraitResponse
+    spreads: List[PreviewSpreadResponse]
+    metadata: PreviewMetadataResponse
+
+
+class StyleAttributesResponse(BaseModel):
+    """Style characteristics for a variant."""
+    warmth: str
+    detail: str
+    expressiveness: str
+
+
+class LikenessVariantResponse(BaseModel):
+    """Single likeness variant."""
+    id: str
+    image_url: str
+    likeness_score: int
+    style_label: str
+    description: str
+    style_attributes: StyleAttributesResponse
+
+
+class PhotoAnalysisResponse(BaseModel):
+    """Source photo analysis result."""
+    face_detected: bool
+    quality_score: int
+    lighting: str
+    angle: str
+
+
+class LikenessVariantsResponse(BaseModel):
+    """Likeness variants generation result."""
+    variants: List[LikenessVariantResponse]
+    processing_time_ms: int
+    source_photo_analysis: PhotoAnalysisResponse
+
+
+class RegenerateTweaksResponse(BaseModel):
+    """Applied tweaks for regeneration."""
+    tone: Optional[str] = None
+    art_modifier: Optional[str] = None
+    sidekick: Optional[str] = None
+
+
+class RegenerateMetadataResponse(BaseModel):
+    """Regeneration metadata."""
+    regeneration_time_ms: int
+    tweaks_applied: RegenerateTweaksResponse
+
+
+class RegenerateSpreadResponse(BaseModel):
+    """Regenerated preview spread."""
+    page_number: int
+    image_url: str
+    text: str
+    updated: bool
+
+
+class PreviewRegenerateResponse(BaseModel):
+    """Preview regeneration result."""
+    preview_id: str
+    hero_portrait: HeroPortraitResponse
+    spreads: List[RegenerateSpreadResponse]
+    metadata: RegenerateMetadataResponse

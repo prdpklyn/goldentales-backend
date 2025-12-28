@@ -173,14 +173,15 @@ COMPOSITION FOR FULL-PAGE LAYOUT:
         art_style: str,
         page_number: int,
         characters_in_scene: Optional[List[str]] = None,
+        art_modifier: str = "",
         quality: GenerationQuality = GenerationQuality.PREVIEW
     ) -> Dict[str, Any]:
         """
         Generate a single illustration with character consistency.
-        
+
         The character bible is included in EVERY prompt to ensure
         the character looks the same across all pages.
-        
+
         Args:
             character_bible: Character description dictionary
             scene_description: Description of the scene
@@ -189,8 +190,9 @@ COMPOSITION FOR FULL-PAGE LAYOUT:
             art_style: Art style to use
             page_number: Page number (used for seed consistency)
             characters_in_scene: Names of additional characters
+            art_modifier: Optional modifier (softer/brighter/detailed)
             quality: Generation quality tier
-            
+
         Returns:
             Dictionary with url, quality, page_number, and cost
         """
@@ -235,7 +237,20 @@ COMPOSITION:
 
 OUTPUT: High-quality children's book illustration, professional, vibrant, safe for all ages.
 """
-        
+
+        # Apply art modifier if provided
+        if art_modifier:
+            modifier_text = ""
+            if art_modifier == "softer":
+                modifier_text = "STYLE MODIFIER: Softer edges, gentler colors, dreamy atmosphere"
+            elif art_modifier == "brighter":
+                modifier_text = "STYLE MODIFIER: Brighter colors, more vibrant, cheerful tones"
+            elif art_modifier == "detailed":
+                modifier_text = "STYLE MODIFIER: More detailed textures, richer elements, intricate details"
+
+            if modifier_text:
+                full_prompt += f"\n\n{modifier_text}\n"
+
         # Get model config for quality tier
         config = self.MODEL_CONFIGS[quality]
         model = config["model"]
@@ -570,3 +585,201 @@ OUTPUT: High-quality children's book illustration, professional, vibrant, safe f
         
         logger.info(f"Generated {len(illustrations)} {tier.value} tier illustrations")
         return illustrations
+
+    async def generate_cover(
+        self,
+        character_bible: Dict[str, str],
+        title: str,
+        art_style: str,
+        quality: GenerationQuality = GenerationQuality.PREVIEW
+    ) -> Dict[str, Any]:
+        """
+        Generate book cover image.
+
+        Args:
+            character_bible: Character description
+            title: Book title
+            art_style: Art style
+            quality: Generation quality
+
+        Returns:
+            Dict with url and prompt
+        """
+        import fal_client
+
+        if not self.api_key:
+            raise ValueError("Fal.ai API key not configured")
+
+        config = self.MODEL_CONFIGS.get(quality, self.MODEL_CONFIGS[GenerationQuality.PREVIEW])
+        style_desc = self.STYLE_DESCRIPTIONS.get(art_style, "watercolor illustration")
+
+        main_char = character_bible.get('main_character', '')
+
+        prompt = f"""
+{style_desc}
+
+Book cover for: {title}
+
+Main character: {main_char}
+
+The character is featured prominently on the cover, looking heroic and adventurous.
+Beautiful background matching the story theme.
+Title space at the top.
+Whimsical, magical children's book aesthetic.
+
+{SAFETY_NEGATIVE_PROMPT}
+"""
+
+        params = {
+            "prompt": prompt,
+            "negative_prompt": SAFETY_NEGATIVE_PROMPT,
+            **config
+        }
+
+        result = await self._call_fal_with_retry(config["model"], params)
+
+        return {
+            "url": result.get("images", [{}])[0].get("url", ""),
+            "prompt": prompt,
+            "quality": quality.value
+        }
+
+    async def generate_hero_portrait(
+        self,
+        character_bible: Dict[str, str],
+        art_style: str,
+        photo_url: Optional[str],
+        quality: GenerationQuality = GenerationQuality.PREVIEW
+    ) -> Dict[str, Any]:
+        """
+        Generate hero portrait.
+
+        Args:
+            character_bible: Character description
+            art_style: Art style
+            photo_url: Optional photo for likeness
+            quality: Generation quality
+
+        Returns:
+            Dict with url and is_placeholder flag
+        """
+        import fal_client
+
+        if not self.api_key:
+            raise ValueError("Fal.ai API key not configured")
+
+        config = self.MODEL_CONFIGS.get(quality, self.MODEL_CONFIGS[GenerationQuality.PREVIEW])
+        style_desc = self.STYLE_DESCRIPTIONS.get(art_style, "watercolor illustration")
+
+        main_char = character_bible.get('main_character', '')
+
+        # If no photo, generate generic portrait
+        if not photo_url:
+            prompt = f"""
+{style_desc}
+
+Portrait of {main_char}
+
+Smiling, friendly expression.
+Centered portrait, shoulders and head visible.
+Magical sparkles or stars in background.
+Clean, simple composition perfect for a character profile.
+
+{SAFETY_NEGATIVE_PROMPT}
+"""
+            is_placeholder = True
+        else:
+            # With photo, try to preserve likeness
+            prompt = f"""
+{style_desc}
+
+Transform this photo into an illustration: {photo_url}
+
+Character: {main_char}
+
+Preserve the child's facial features and likeness.
+Smiling, friendly expression.
+Centered portrait.
+
+{SAFETY_NEGATIVE_PROMPT}
+"""
+            is_placeholder = False
+
+        params = {
+            "prompt": prompt,
+            "negative_prompt": SAFETY_NEGATIVE_PROMPT,
+            **config
+        }
+
+        if photo_url and not is_placeholder:
+            params["image_url"] = photo_url
+
+        result = await self._call_fal_with_retry(config["model"], params)
+
+        return {
+            "url": result.get("images", [{}])[0].get("url", ""),
+            "is_placeholder": is_placeholder,
+            "quality": quality.value
+        }
+
+    async def generate_hero_portrait_with_reference(
+        self,
+        character_reference_url: str,
+        art_style: str,
+        art_modifier: str = "",
+        quality: GenerationQuality = GenerationQuality.PREVIEW
+    ) -> Dict[str, Any]:
+        """
+        Generate hero portrait using approved character reference.
+
+        Args:
+            character_reference_url: URL to approved character variant
+            art_style: Art style
+            art_modifier: Optional modifier (softer/brighter/detailed)
+            quality: Generation quality
+
+        Returns:
+            Dict with url
+        """
+        import fal_client
+
+        if not self.api_key:
+            raise ValueError("Fal.ai API key not configured")
+
+        config = self.MODEL_CONFIGS.get(quality, self.MODEL_CONFIGS[GenerationQuality.PREVIEW])
+        style_desc = self.STYLE_DESCRIPTIONS.get(art_style, "watercolor illustration")
+
+        modifier_text = ""
+        if art_modifier == "softer":
+            modifier_text = "softer edges, gentler colors"
+        elif art_modifier == "brighter":
+            modifier_text = "brighter colors, more vibrant"
+        elif art_modifier == "detailed":
+            modifier_text = "more detailed, richer textures"
+
+        prompt = f"""
+{style_desc}
+
+Using this character reference: {character_reference_url}
+
+Portrait maintaining EXACT character likeness.
+{modifier_text}
+Smiling, friendly expression.
+Centered portrait.
+
+{SAFETY_NEGATIVE_PROMPT}
+"""
+
+        params = {
+            "prompt": prompt,
+            "image_url": character_reference_url,
+            "negative_prompt": SAFETY_NEGATIVE_PROMPT,
+            **config
+        }
+
+        result = await self._call_fal_with_retry(config["model"], params)
+
+        return {
+            "url": result.get("images", [{}])[0].get("url", ""),
+            "quality": quality.value
+        }

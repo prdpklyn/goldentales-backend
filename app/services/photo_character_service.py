@@ -336,13 +336,186 @@ class PhotoCharacterService:
             "message": "Character approved! You can now create your book."
         }
     
+    async def generate_likeness_variants(
+        self,
+        photo_url: str,
+        art_style: str,
+        child_name: str,
+        child_gender: str,
+        age_band: str,
+        num_variants: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Generate multiple artistic style variants that preserve photo likeness.
+
+        Args:
+            photo_url: URL to uploaded photo
+            art_style: Art style (watercolor, cartoon, storybook, anime)
+            child_name: Child's name
+            child_gender: Child's gender
+            age_band: Age band (3-5, 6-8, 9-12)
+            num_variants: Number of variants to generate (1-5)
+
+        Returns:
+            Dict with variants array and metadata
+        """
+        import asyncio
+        import time
+
+        logger.info(f"Generating {num_variants} likeness variants for {child_name}")
+        start_time = time.time()
+
+        # Validate photo first
+        validation = await self.validate_photo(photo_url)
+        if not validation["valid"]:
+            raise ValueError(f"Photo validation failed: {validation['message']}")
+
+        # Define variant styles with different parameters
+        variant_configs = [
+            {
+                "label": "A",
+                "description": "Warm, expressive with soft edges",
+                "attributes": {"warmth": "high", "detail": "medium", "expressiveness": "high"},
+                "prompt_modifier": "warm tones, expressive features, soft gentle edges"
+            },
+            {
+                "label": "B",
+                "description": "Soft, dreamy with gentle tones",
+                "attributes": {"warmth": "medium", "detail": "low", "expressiveness": "medium"},
+                "prompt_modifier": "dreamy atmosphere, gentle soft tones, simplified details"
+            },
+            {
+                "label": "C",
+                "description": "Bold, vibrant with rich colors",
+                "attributes": {"warmth": "high", "detail": "high", "expressiveness": "high"},
+                "prompt_modifier": "bold vibrant colors, rich details, energetic expression"
+            },
+            {
+                "label": "D",
+                "description": "Classic, balanced with natural tones",
+                "attributes": {"warmth": "medium", "detail": "medium", "expressiveness": "medium"},
+                "prompt_modifier": "balanced natural tones, classic composition, moderate details"
+            },
+            {
+                "label": "E",
+                "description": "Delicate, subtle with fine details",
+                "attributes": {"warmth": "low", "detail": "high", "expressiveness": "low"},
+                "prompt_modifier": "delicate subtle colors, fine intricate details, calm expression"
+            }
+        ]
+
+        # Select the requested number of variants
+        selected_configs = variant_configs[:min(num_variants, 5)]
+
+        # Generate variants in parallel
+        variant_tasks = []
+        for config in selected_configs:
+            task = self._generate_single_variant(
+                photo_url, art_style, config, child_name
+            )
+            variant_tasks.append(task)
+
+        # Wait for all variants to complete
+        variant_results = await asyncio.gather(*variant_tasks, return_exceptions=True)
+
+        # Process results
+        variants = []
+        for i, (config, result) in enumerate(zip(selected_configs, variant_results)):
+            if isinstance(result, Exception):
+                logger.error(f"Variant {config['label']} generation failed: {result}")
+                continue
+
+            variants.append({
+                "id": f"var_{config['label'].lower()}_{uuid.uuid4().hex[:8]}",
+                "image_url": result["image_url"],
+                "likeness_score": result.get("likeness_score", 85 + i * 2),  # Simulated scores
+                "style_label": config["label"],
+                "description": f"{config['description']} {art_style}",
+                "style_attributes": config["attributes"]
+            })
+
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        logger.info(f"Generated {len(variants)} variants in {processing_time_ms}ms")
+
+        return {
+            "variants": variants,
+            "processing_time_ms": processing_time_ms,
+            "source_photo_analysis": {
+                "face_detected": validation["face_detected"],
+                "quality_score": int(validation["confidence"] * 100),
+                "lighting": "good",  # Simulated analysis
+                "angle": "frontal"  # Simulated analysis
+            }
+        }
+
+    async def _generate_single_variant(
+        self,
+        photo_url: str,
+        art_style: str,
+        config: Dict[str, Any],
+        child_name: str
+    ) -> Dict[str, Any]:
+        """Generate a single likeness variant with specific style config."""
+        import fal_client
+
+        if not self.api_key:
+            raise ValueError("Fal.ai API key not configured")
+
+        # Build prompt with style modifier
+        base_prompt = self.STYLE_PROMPTS.get(
+            ArtStyle(art_style),
+            "Transform into illustrated character"
+        )
+
+        full_prompt = f"""
+{base_prompt}
+
+STYLE VARIATION: {config['prompt_modifier']}
+
+CRITICAL: Preserve the child's facial features and likeness exactly.
+Maintain recognizable features: eyes, nose, mouth shape, face structure.
+Character name: {child_name}
+"""
+
+        params = {
+            "image_url": photo_url,
+            "prompt": full_prompt,
+            "strength": 0.75,  # Balance between likeness and style
+            "guidance_scale": 7.5,
+            "num_inference_steps": 28,
+            "enable_safety_checker": True
+        }
+
+        try:
+            # Use nano-banana/edit for style transfer
+            result = await fal_client.subscribe_async(
+                "fal-ai/flux/dev/image-to-image",
+                arguments=params
+            )
+
+            image_url = result.get("images", [{}])[0].get("url", "")
+
+            return {
+                "image_url": image_url,
+                "likeness_score": 88  # Simulated score
+            }
+
+        except Exception as e:
+            logger.error(f"Variant generation failed: {e}")
+            raise ExternalServiceException(
+                service_name="Fal.ai",
+                message=f"Failed to generate variant: {str(e)}",
+                is_transient=False
+            )
+
     def get_preview_session(self, preview_id: str) -> Optional[Dict[str, Any]]:
         """
         Get a preview session by ID.
-        
+
         Args:
             preview_id: ID of the preview session
-            
+
         Returns:
             Preview session data or None if not found
         """
