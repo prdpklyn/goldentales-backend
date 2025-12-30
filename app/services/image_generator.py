@@ -636,7 +636,7 @@ Whimsical, magical children's book aesthetic.
             **config
         }
 
-        result = await self._call_fal_with_retry(config["model"], params)
+        result = await self._call_fal_ai_with_retry(config["model"], params)
 
         return {
             "url": result.get("images", [{}])[0].get("url", ""),
@@ -714,7 +714,7 @@ Centered portrait.
         if photo_url and not is_placeholder:
             params["image_url"] = photo_url
 
-        result = await self._call_fal_with_retry(config["model"], params)
+        result = await self._call_fal_ai_with_retry(config["model"], params)
 
         return {
             "url": result.get("images", [{}])[0].get("url", ""),
@@ -777,7 +777,7 @@ Centered portrait.
             **config
         }
 
-        result = await self._call_fal_with_retry(config["model"], params)
+        result = await self._call_fal_ai_with_retry(config["model"], params)
 
         return {
             "url": result.get("images", [{}])[0].get("url", ""),

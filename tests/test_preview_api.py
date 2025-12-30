@@ -10,22 +10,45 @@ from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from main import app
+from app.routers.v2.preview import require_api_key
+from app.routers.v2.photo import require_jwt_auth
+from app.middleware.auth import APIKeyData
+from app.middleware.jwt_auth import JWTUser
 
 
-client = TestClient(app)
+# Mock API key for testing
+async def mock_api_key_dependency():
+    """Mock API key dependency."""
+    return APIKeyData(
+        key_id="test-key-123",
+        name="Test Key",
+        rate_limit_tier="standard",
+        is_active=True
+    )
 
 
-# Mock JWT authentication
+# Mock JWT user for testing
+async def mock_jwt_dependency():
+    """Mock JWT dependency."""
+    return JWTUser(
+        user_id="test-user-123",
+        email="test@example.com"
+    )
+
+
+# Test client with mocked auth
 @pytest.fixture
-def mock_jwt_auth():
-    """Mock JWT authentication for testing."""
-    with patch("app.middleware.jwt_auth.require_jwt_auth") as mock:
-        mock_user = MagicMock()
-        mock_user.user_id = "test-user-123"
-        mock_user.email = "test@example.com"
-        mock_user.raw_token = "mock-jwt-token"
-        mock.return_value = mock_user
-        yield mock
+def client():
+    """Create test client with mocked authentication."""
+    # Override dependencies
+    app.dependency_overrides[require_api_key] = mock_api_key_dependency
+    app.dependency_overrides[require_jwt_auth] = mock_jwt_dependency
+
+    client = TestClient(app)
+    yield client
+
+    # Clean up
+    app.dependency_overrides.clear()
 
 
 # Mock preview service
@@ -41,15 +64,16 @@ def mock_preview_service():
 @pytest.fixture
 def mock_photo_service():
     """Mock PhotoCharacterService for testing."""
-    with patch("app.services.photo_character_service.get_photo_character_service") as mock:
+    with patch("app.routers.v2.photo.get_photo_character_service") as mock:
         mock_service = MagicMock()
+        mock.return_value = mock_service
         yield mock_service
 
 
 class TestQuickPreviewEndpoint:
     """Tests for POST /api/v2/preview/quick"""
 
-    def test_quick_preview_success(self, mock_jwt_auth, mock_preview_service):
+    def test_quick_preview_success(self, client, mock_preview_service):
         """Test successful quick preview generation."""
         # Mock service response
         mock_preview_service.generate_quick_preview = AsyncMock(return_value={
@@ -103,7 +127,7 @@ class TestQuickPreviewEndpoint:
         assert len(data["spreads"]) == 2
         assert data["metadata"]["generation_time_ms"] < 60000  # Under 60 seconds
 
-    def test_quick_preview_invalid_age_band(self, mock_jwt_auth):
+    def test_quick_preview_invalid_age_band(self, client):
         """Test quick preview with invalid age_band."""
         response = client.post(
             "/api/v2/preview/quick",
@@ -119,7 +143,7 @@ class TestQuickPreviewEndpoint:
         assert response.status_code == 422
         assert "age_band" in response.text.lower()
 
-    def test_quick_preview_invalid_theme(self, mock_jwt_auth):
+    def test_quick_preview_invalid_theme(self, client):
         """Test quick preview with invalid theme."""
         response = client.post(
             "/api/v2/preview/quick",
@@ -139,7 +163,7 @@ class TestQuickPreviewEndpoint:
 class TestLikenessVariantsEndpoint:
     """Tests for POST /api/v2/photo/likeness-variants"""
 
-    def test_likeness_variants_success(self, mock_jwt_auth, mock_photo_service):
+    def test_likeness_variants_success(self, client, mock_photo_service):
         """Test successful likeness variant generation."""
         # Mock service response
         mock_photo_service.generate_likeness_variants = AsyncMock(return_value={
@@ -215,14 +239,14 @@ class TestLikenessVariantsEndpoint:
 class TestPreviewRegenerateEndpoint:
     """Tests for POST /api/v2/preview/regenerate"""
 
-    def test_regenerate_preview_success(self, mock_jwt_auth, mock_preview_service):
+    def test_regenerate_preview_success(self, client, mock_preview_service):
         """Test successful preview regeneration."""
-        # Mock service response
+        # Mock service response (matching actual service response structure)
         mock_preview_service.regenerate_preview = AsyncMock(return_value={
             "preview_id": "preview-123",
             "hero_portrait": {
                 "image_url": "https://cdn.example.com/hero-updated.jpg",
-                "updated": True
+                "is_placeholder": False
             },
             "spreads": [
                 {
@@ -266,11 +290,13 @@ class TestPreviewRegenerateEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["preview_id"] == "preview-123"
-        assert data["hero_portrait"]["updated"] is True
+        assert data["hero_portrait"]["image_url"] == "https://cdn.example.com/hero-updated.jpg"
+        assert data["hero_portrait"]["is_placeholder"] is False
         assert len(data["spreads"]) == 2
+        assert data["spreads"][0]["updated"] is True
         assert data["metadata"]["regeneration_time_ms"] < 15000  # Under 15 seconds
 
-    def test_regenerate_preview_not_found(self, mock_jwt_auth, mock_preview_service):
+    def test_regenerate_preview_not_found(self, client, mock_preview_service):
         """Test regenerate with non-existent preview_id."""
         from app.utils.exceptions import ValidationException
 

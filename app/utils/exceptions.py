@@ -67,7 +67,7 @@ class ResourceNotFoundException(GoldenTalesException):
 
 class ExternalServiceException(GoldenTalesException):
     """Raised when an external service (Fal.ai, Gemini, etc.) fails."""
-    
+
     def __init__(
         self,
         service_name: str,
@@ -75,10 +75,13 @@ class ExternalServiceException(GoldenTalesException):
         is_transient: bool = True,
         **kwargs
     ):
+        self.is_transient = is_transient  # Store as direct attribute for easy access
+        self.service_name = service_name
+
         details = kwargs.pop("details", {})
         details["service"] = service_name
         details["is_transient"] = is_transient
-        
+
         super().__init__(
             message=f"{service_name} error: {message}",
             error_code="external_service_error",

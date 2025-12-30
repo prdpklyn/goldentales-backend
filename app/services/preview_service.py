@@ -42,9 +42,9 @@ def _gender_to_enum(gender_str: str) -> Gender:
     mapping = {
         "boy": Gender.BOY,
         "girl": Gender.GIRL,
-        "they": Gender.NONBINARY
+        "they": Gender.GIRL  # Default to GIRL for 'they' since Gender enum only has BOY/GIRL
     }
-    return mapping.get(gender_str, Gender.NONBINARY)
+    return mapping.get(gender_str, Gender.GIRL)
 
 
 def _get_default_character_attributes(age_band: str, gender: str) -> Dict[str, Any]:
@@ -53,7 +53,7 @@ def _get_default_character_attributes(age_band: str, gender: str) -> Dict[str, A
     return {
         "skin_tone": SkinTone.LIGHT,
         "hair_color": HairColor.BROWN,
-        "hair_style": HairStyle.SHORT if gender == "boy" else HairStyle.LONG_STRAIGHT,
+        "hair_style": HairStyle.SHORT_NEAT if gender == "boy" else HairStyle.LONG_STRAIGHT,
         "eye_color": EyeColor.BROWN,
         "body_type": BodyType.AVERAGE
     }
@@ -177,7 +177,11 @@ class PreviewService:
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     logger.error(f"Image generation failed for task {i}: {result}")
-                    raise ExternalServiceException(f"Image generation failed: {str(result)}")
+                    raise ExternalServiceException(
+                        service_name="Image Generator",
+                        message=f"Image generation failed: {str(result)}",
+                        is_transient=True
+                    )
 
             cover_img, hero_img, page1_img, page2_img = results
 
@@ -243,7 +247,11 @@ class PreviewService:
 
         except Exception as e:
             logger.error(f"Quick preview generation failed: {e}")
-            raise ExternalServiceException(f"Failed to generate preview: {str(e)}")
+            raise ExternalServiceException(
+                service_name="Preview Service",
+                message=f"Failed to generate preview: {str(e)}",
+                is_transient=False
+            )
 
     async def regenerate_preview(
         self,
@@ -348,7 +356,11 @@ class PreviewService:
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     logger.error(f"Page regeneration failed for page {i+1}: {result}")
-                    raise ExternalServiceException(f"Page regeneration failed: {str(result)}")
+                    raise ExternalServiceException(
+                        service_name="Image Generator",
+                        message=f"Page regeneration failed: {str(result)}",
+                        is_transient=True
+                    )
 
             page1_img, page2_img = results
 
@@ -391,7 +403,11 @@ class PreviewService:
             raise
         except Exception as e:
             logger.error(f"Preview regeneration failed: {e}")
-            raise ExternalServiceException(f"Failed to regenerate preview: {str(e)}")
+            raise ExternalServiceException(
+                service_name="Preview Service",
+                message=f"Failed to regenerate preview: {str(e)}",
+                is_transient=False
+            )
 
     def get_preview_session(self, preview_id: str) -> Optional[Dict[str, Any]]:
         """Get preview session by ID."""
