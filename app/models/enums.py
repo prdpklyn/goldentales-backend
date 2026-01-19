@@ -58,6 +58,39 @@ class GenerationQuality(str, Enum):
     PRINT = "print"          # High quality - for final print
 
 
+class BookType(str, Enum):
+    """Type of book content."""
+    CHILDREN = "children"           # Personalized children's storybooks
+    EDUCATIONAL = "educational"     # Educational storybooks for learning
+
+
+class LearningLevel(str, Enum):
+    """Learning proficiency levels."""
+    BEGINNER = "beginner"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+    EXPERT = "expert"
+
+
+class TopicCategory(str, Enum):
+    """Academic topic categories."""
+    STEM = "stem"                   # Science, Technology, Engineering, Math
+    HUMANITIES = "humanities"       # History, Philosophy, Literature
+    LANGUAGES = "languages"         # Foreign languages, Linguistics
+    ARTS = "arts"                   # Visual arts, Music, Performing arts
+    BUSINESS = "business"           # Economics, Finance, Management
+    OTHER = "other"                 # Miscellaneous topics
+
+
+class ConceptCharacterType(str, Enum):
+    """Types of conceptual characters in educational stories."""
+    AGENT = "agent"                 # Active entity (e.g., RL agent)
+    ENVIRONMENT = "environment"     # Context/setting (e.g., maze, market)
+    PROCESS = "process"             # Actions/transformations (e.g., photosynthesis)
+    ENTITY = "entity"               # Objects/concepts (e.g., neuron, atom)
+    GUIDE = "guide"                 # Teacher/mentor character
+
+
 class OrderStatus(str, Enum):
     """Order processing stages."""
     # Payment

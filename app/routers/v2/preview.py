@@ -10,8 +10,8 @@ These endpoints are PUBLIC and only require API key authentication (not JWT).
 from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException, Depends, Header
 
-from app.models.requests import QuickPreviewRequest, PreviewRegenerateRequest
-from app.models.responses import QuickPreviewResponse, PreviewRegenerateResponse
+from app.models.requests import QuickPreviewRequest, PreviewRegenerateRequest, ExtendPreviewRequest
+from app.models.responses import QuickPreviewResponse, PreviewRegenerateResponse, ExtendPreviewResponse
 from app.services.preview_service import PreviewService
 from app.middleware.auth import APIKeyData, get_api_key_validator
 from app.utils.logging import get_logger
@@ -213,3 +213,81 @@ async def get_preview_status(
     except Exception as e:
         logger.error(f"Error getting preview status: {e}")
         raise HTTPException(status_code=500, detail="Failed to get preview status")
+
+
+@router.post("/{preview_id}/extend", response_model=ExtendPreviewResponse)
+async def extend_preview_to_book(
+    preview_id: str,
+    request: ExtendPreviewRequest,
+    api_key: APIKeyData = Depends(require_api_key)
+) -> ExtendPreviewResponse:
+    """
+    Extend a 2-page preview to a full 10-page book.
+
+    **Authentication**: Requires X-API-Key header
+
+    **Performance**: May take 2-5 minutes for full generation
+
+    **Story Continuation**:
+    - `regenerate_story=false` (default): Continues the existing preview story to 10 pages
+    - `regenerate_story=true`: Generates an entirely new 10-page story with the same character
+
+    **Features**:
+    - Maintains character consistency using the preview's character_bible
+    - Optional photo upload for enhanced hero portrait
+    - High-quality (2048x2048) images for print
+    - Configurable page count (3-20 pages)
+    - Optional occasion and special details
+
+    Args:
+        preview_id: Preview session ID from /api/v2/preview/quick
+        request: Extension parameters (photo_url, regenerate_story, etc.)
+        api_key: Validated API key data
+
+    Returns:
+        ExtendPreviewResponse with complete book data
+
+    Raises:
+        401: Missing or invalid API key
+        404: Preview not found or expired
+        400: Invalid request parameters
+        500: Generation failed
+
+    Example:
+        POST /api/v2/preview/{preview_id}/extend
+        {
+            "photo_url": "https://example.com/photo.jpg",
+            "regenerate_story": false,
+            "target_pages": 10,
+            "occasion": "Birthday gift",
+            "special_details": "Include a rainbow unicorn friend"
+        }
+    """
+    logger.info(f"Extending preview {preview_id} to book (API key: {api_key.key_id})")
+
+    try:
+        service = PreviewService()
+        result = await service.extend_preview_to_book(
+            preview_id=preview_id,
+            photo_url=request.photo_url,
+            regenerate_story=request.regenerate_story,
+            target_pages=request.target_pages,
+            occasion=request.occasion,
+            special_details=request.special_details
+        )
+
+        logger.info(f"Successfully extended preview {preview_id} to book {result['book_id']}")
+
+        return ExtendPreviewResponse(**result)
+
+    except ValidationException as e:
+        logger.warning(f"Validation error: {e}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except ExternalServiceException as e:
+        logger.error(f"External service error: {e}")
+        if e.is_transient:
+            raise HTTPException(status_code=503, detail="AI service temporarily unavailable. Please try again.")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error extending preview: {e}")
+        raise HTTPException(status_code=500, detail="Failed to extend preview to book")

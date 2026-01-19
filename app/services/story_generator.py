@@ -328,3 +328,133 @@ Return ONLY a JSON array with exactly {num_pages} pages:
                 message=f"Preview story generation failed: {str(e)}",
                 is_transient=False
             )
+
+    async def continue_story(
+        self,
+        character_bible: Dict[str, str],
+        child_name: str,
+        age: int,
+        theme: str,
+        existing_pages: List[Dict],
+        target_total_pages: int = 10,
+        occasion: Optional[str] = None,
+        special_details: Optional[str] = None
+    ) -> List[Dict]:
+        """
+        Continue an existing story from where it left off.
+
+        This method generates the remaining pages of a story that was started
+        with generate_preview_story(). It maintains continuity by providing
+        context from existing pages.
+
+        Args:
+            character_bible: Character description dictionary
+            child_name: Name of the main character
+            age: Age of the child
+            theme: Story theme
+            existing_pages: Already generated pages (e.g., first 2 pages)
+            target_total_pages: Total pages wanted (default: 10)
+            occasion: Special occasion (optional)
+            special_details: Additional story details (optional)
+
+        Returns:
+            List of NEW page dictionaries (pages that continue the story)
+        """
+        import google.generativeai as genai
+
+        if not self.api_key:
+            raise ValueError("Gemini API key not configured")
+
+        genai.configure(api_key=self.api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+
+        num_existing = len(existing_pages)
+        num_new_pages = target_total_pages - num_existing
+
+        if num_new_pages <= 0:
+            logger.warning(f"No new pages needed: {num_existing} existing >= {target_total_pages} target")
+            return []
+
+        theme_elements = self.THEME_ELEMENTS.get(theme, '')
+
+        # Build context from existing pages
+        existing_story_summary = "\n".join([
+            f"Page {p['page_number']}: {p['text']}"
+            for p in existing_pages
+        ])
+
+        prompt = f"""
+You are continuing a children's storybook that has already started.
+
+=== MAIN CHARACTER ===
+{character_bible.get('main_character', f'{child_name}, {age}-year-old child')}
+
+=== EXISTING STORY (Pages 1-{num_existing}) ===
+{existing_story_summary}
+
+=== STORY SETTINGS ===
+Theme: {theme.upper()} - {theme_elements}
+Occasion: {occasion or 'A gift made with love'}
+Special details: {special_details or 'None'}
+
+=== YOUR TASK ===
+Continue the story from page {num_existing + 1} to page {target_total_pages}.
+Generate exactly {num_new_pages} new pages that:
+1. Continue naturally from where the preview left off
+2. Follow the same character and theme
+3. Build toward an exciting climax (pages {target_total_pages - 2}-{target_total_pages - 1})
+4. End with a satisfying resolution (page {target_total_pages})
+
+=== REQUIREMENTS ===
+1. {child_name} remains the HERO - brave, kind, and special
+2. Each page: 2-3 sentences (25-40 words max)
+3. Simple vocabulary for age {age}
+4. Story arc: Middle/Rising Action (pages {num_existing + 1}-{target_total_pages - 2}) → Climax (pages {target_total_pages - 1}-{target_total_pages - 1}) → Resolution (page {target_total_pages})
+5. CRITICAL: In scene_description, ALWAYS describe the main character using the EXACT details above
+6. Include character's specific features in EVERY scene_description
+7. Maintain continuity with the existing story
+
+=== OUTPUT FORMAT ===
+Return ONLY a JSON array with exactly {num_new_pages} pages starting from page {num_existing + 1}:
+[
+  {{
+    "page_number": {num_existing + 1},
+    "text": "Story continues...",
+    "scene_description": "{child_name}'s full appearance. Scene details.",
+    "character_action": "What {child_name} is doing",
+    "mood": "happy/excited/curious/brave/peaceful/magical",
+    "characters_in_scene": ["{child_name}"]
+  }},
+  ...
+]
+
+IMPORTANT:
+- Start with page_number {num_existing + 1}
+- scene_description MUST include character's appearance every time!
+- Maintain story continuity from the preview
+"""
+
+        try:
+            logger.info(f"Continuing story for {child_name}: generating pages {num_existing + 1}-{target_total_pages}")
+            response_text = await self._call_gemini_with_retry(prompt)
+
+            # Parse JSON response
+            new_pages = parse_story_json(response_text)
+
+            # Ensure page numbers are correct
+            for i, page in enumerate(new_pages):
+                page['page_number'] = num_existing + 1 + i
+
+            # Enhance scene descriptions
+            new_pages = self._enhance_scene_descriptions(new_pages, character_bible)
+
+            logger.info(f"Generated {len(new_pages)} continuation pages (total story: {num_existing + len(new_pages)} pages)")
+            return new_pages[:num_new_pages]
+
+        except Exception as e:
+            logger.error(f"Story continuation failed: {e}")
+            raise ExternalServiceException(
+                service_name="Gemini AI",
+                message=f"Story continuation failed: {str(e)}",
+                is_transient=False
+            )

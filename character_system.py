@@ -166,14 +166,57 @@ class AdditionalCharacter(BaseModel):
     # Common
     distinctive_feature: Optional[str] = None  # "always wears a blue bow"
 
+
+# ============================================
+# EDUCATIONAL CONCEPT CHARACTERS
+# ============================================
+
+class ConceptCharacterType(str, Enum):
+    """Types of conceptual characters in educational stories."""
+    AGENT = "agent"                 # Active entity (e.g., RL agent)
+    ENVIRONMENT = "environment"     # Context/setting (e.g., maze, market)
+    PROCESS = "process"             # Actions/transformations (e.g., photosynthesis)
+    ENTITY = "entity"               # Objects/concepts (e.g., neuron, atom)
+    GUIDE = "guide"                 # Teacher/mentor character
+
+
+class ConceptCharacter(BaseModel):
+    """
+    Character representing an abstract concept in educational stories.
+    
+    These characters personify concepts to make them easier to understand.
+    For example, in a story about reinforcement learning:
+    - "Agent Alpha" (agent type) represents the learning agent
+    - "Rewardy" (entity type) represents reward signals
+    - "Professor Pi" (guide type) explains concepts
+    """
+    name: str = Field(..., min_length=1, max_length=100)
+    character_type: ConceptCharacterType
+    concept_name: str = Field(..., min_length=1, max_length=200)  # The concept it represents
+    
+    # Visual description
+    visual_form: str  # "friendly robot", "glowing orb", "wise owl"
+    primary_colors: List[str] = Field(default_factory=list)  # ["blue", "silver"]
+    distinctive_features: str  # "digital display on chest", "sparkles when happy"
+    
+    # Personality/role
+    personality_traits: Optional[str] = None  # "curious, determined"
+    role_in_story: Optional[str] = None  # "helps learner understand rewards"
+    
+    # Consistency tracking
+    character_slug: Optional[str] = None  # URL-safe identifier for reuse
+    reference_image_url: Optional[str] = None  # Reference image for consistency
+
 class CharacterProfile(BaseModel):
     """Complete character profile for a story."""
     main_character: MainCharacter
     additional_characters: List[AdditionalCharacter] = []
+    concept_characters: List[ConceptCharacter] = []  # For educational stories
     
     # Story context
     theme: str
     art_style: str
+    book_type: str = "children"  # "children" or "educational"
 
 
 # ============================================
@@ -275,6 +318,30 @@ class CharacterDescriptionGenerator:
         
         return " ".join(parts)
     
+    @staticmethod
+    def generate_concept_character_description(char: ConceptCharacter) -> str:
+        """
+        Generate description for a concept character.
+        
+        These characters represent abstract concepts in educational stories.
+        """
+        parts = [
+            f"{char.name}",
+            f"(represents: {char.concept_name})",
+            f"appears as {char.visual_form}",
+        ]
+        
+        if char.primary_colors:
+            parts.append(f"in {' and '.join(char.primary_colors)} colors")
+        
+        if char.distinctive_features:
+            parts.append(f"with {char.distinctive_features}")
+        
+        if char.personality_traits:
+            parts.append(f"personality: {char.personality_traits}")
+        
+        return ", ".join(parts)
+    
     @classmethod
     def generate_full_character_bible(cls, profile: CharacterProfile) -> Dict[str, str]:
         """
@@ -288,14 +355,24 @@ class CharacterDescriptionGenerator:
         for char in profile.additional_characters:
             additional_descs.append(cls.generate_additional_character_description(char))
         
+        concept_descs = []
+        for char in profile.concept_characters:
+            concept_descs.append(cls.generate_concept_character_description(char))
+        
+        # Build summary with all character types
+        summary_parts = [main_desc]
+        if additional_descs:
+            summary_parts.append("Also featuring: " + "; ".join(additional_descs))
+        if concept_descs:
+            summary_parts.append("Concept characters: " + "; ".join(concept_descs))
+        
         # Create the "character bible" - this goes in every prompt
         character_bible = {
             "main_character": main_desc,
             "main_character_short": f"{profile.main_character.name}, {profile.main_character.age}-year-old {profile.main_character.gender.value}",
             "additional_characters": additional_descs,
-            "all_characters_summary": main_desc + (
-                ". Also featuring: " + "; ".join(additional_descs) if additional_descs else ""
-            )
+            "concept_characters": concept_descs,
+            "all_characters_summary": ". ".join(summary_parts)
         }
         
         return character_bible

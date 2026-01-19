@@ -159,6 +159,103 @@ Return an enhanced scene description (2-3 sentences).""",
         variables=["scene_description", "character_description", "art_style", "theme"],
         description="Enhance basic scene descriptions for better illustrations",
     ),
+    
+    # Educational templates
+    "educational_story": PromptTemplate(
+        name="educational_story",
+        category=PromptCategory.STORY,
+        template="""Create an EDUCATIONAL storybook to teach {{ topic }} ({{ topic_category }}).
+
+=== CHAPTER CONTEXT ===
+Chapter {{ chapter_number }} of {{ total_chapters }}
+Concepts to teach: {{ concepts }}
+{% if previous_concepts %}Previous chapters covered: {{ previous_concepts }}{% endif %}
+
+=== LEARNER CHARACTER ===
+{{ learner_character }}
+
+=== CONCEPT CHARACTERS ===
+{{ concept_characters }}
+
+=== LEARNER PROFILE ===
+Name: {{ learner_name }}
+Level: {{ learner_level }}
+Age band: {{ age_band }}
+
+=== PEDAGOGICAL STRUCTURE (10 pages) ===
+Pages 1-2 (SETUP): Introduce topic and create context
+Pages 3-6 (CORE CONCEPTS): Teach concepts progressively
+Pages 7-8 (APPLICATION): Show concepts in practice
+Page 9 (REINFORCEMENT): Review and test understanding
+Page 10 (SUMMARY): Recap and celebrate progress
+
+Generate a 10-page educational story as JSON array with pedagogical structure.""",
+        variables=["topic", "topic_category", "concepts", "chapter_number", "total_chapters",
+                   "learner_character", "concept_characters", "learner_name", "learner_level", "age_band"],
+        description="Generate educational stories with pedagogical structure",
+    ),
+    
+    "quiz_generation": PromptTemplate(
+        name="quiz_generation",
+        category=PromptCategory.SYSTEM,
+        template="""Generate a {{ num_questions }}-question quiz to assess understanding of: {{ topic }}
+
+TOPIC CATEGORY: {{ topic_category }}
+DIFFICULTY: {{ difficulty_level }}
+AGE BAND: {{ age_band }}
+
+REQUIREMENTS:
+1. Questions assess conceptual understanding
+2. Mix of what/why/how questions
+3. Each question has 4 options with ONE correct answer
+4. Include explanations for correct answers
+
+OUTPUT FORMAT (JSON):
+{{
+  "questions": [
+    {{
+      "question_number": 1,
+      "question_text": "Question text",
+      "options": [{{"id": "A", "text": "Option A"}}, ...],
+      "correct_answer": "B",
+      "explanation": "Why B is correct",
+      "difficulty": "easy|medium|hard"
+    }}
+  ]
+}}
+
+Return ONLY valid JSON.""",
+        variables=["topic", "topic_category", "num_questions", "difficulty_level", "age_band"],
+        description="Generate assessment quizzes for educational topics",
+    ),
+    
+    "concept_character": PromptTemplate(
+        name="concept_character",
+        category=PromptCategory.CHARACTER,
+        template="""Create a personified character to represent the concept "{{ concept_name }}" in an educational story about {{ topic }}.
+
+CHARACTER TYPE: {{ character_type }}
+ART STYLE: {{ art_style }}
+TARGET AUDIENCE: {{ age_band }}
+
+Generate:
+1. CHARACTER NAME: Creative name that hints at the concept
+2. VISUAL FORM: How the character appears
+3. PRIMARY COLORS: 2-3 main colors
+4. DISTINCTIVE FEATURES: Unique visual markers
+5. PERSONALITY TRAITS: Traits that reflect the concept
+6. ROLE IN STORY: How this character teaches the concept
+
+FORMAT:
+NAME: [name]
+VISUAL_FORM: [description]
+COLORS: [color1, color2, color3]
+FEATURES: [features]
+PERSONALITY: [traits]
+ROLE: [teaching role]""",
+        variables=["concept_name", "topic", "character_type", "art_style", "age_band"],
+        description="Generate concept characters that personify abstract ideas",
+    ),
 }
 
 

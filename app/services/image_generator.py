@@ -636,7 +636,7 @@ Whimsical, magical children's book aesthetic.
             **config
         }
 
-        result = await self._call_fal_ai_with_retry(config["model"], params)
+        result = await self._call_fal_ai_with_retry(config["model"], params, page_number=0)
 
         return {
             "url": result.get("images", [{}])[0].get("url", ""),
@@ -714,7 +714,7 @@ Centered portrait.
         if photo_url and not is_placeholder:
             params["image_url"] = photo_url
 
-        result = await self._call_fal_ai_with_retry(config["model"], params)
+        result = await self._call_fal_ai_with_retry(config["model"], params, page_number=0)
 
         return {
             "url": result.get("images", [{}])[0].get("url", ""),
@@ -777,7 +777,56 @@ Centered portrait.
             **config
         }
 
-        result = await self._call_fal_ai_with_retry(config["model"], params)
+        result = await self._call_fal_ai_with_retry(config["model"], params, page_number=0)
+
+        return {
+            "url": result.get("images", [{}])[0].get("url", ""),
+            "quality": quality.value
+        }
+
+    async def generate_with_prompt(
+        self,
+        prompt: str,
+        negative_prompt: str = "",
+        width: int = 1024,
+        height: int = 1024,
+        quality: GenerationQuality = GenerationQuality.PREVIEW,
+        page_number: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Generate an image directly from a prompt string.
+
+        This is a simple wrapper for custom prompts (e.g., Pixar-style preview).
+
+        Args:
+            prompt: The full prompt text
+            negative_prompt: Negative prompt for quality control
+            width: Image width in pixels
+            height: Image height in pixels
+            quality: Generation quality (PREVIEW or PRINT)
+            page_number: Page number for logging (0 for special images)
+
+        Returns:
+            Dict with url and quality
+        """
+        import fal_client
+
+        if not self.api_key:
+            raise ValueError("Fal.ai API key not configured")
+
+        config = self.MODEL_CONFIGS.get(quality, self.MODEL_CONFIGS[GenerationQuality.PREVIEW])
+
+        params = {
+            "prompt": prompt,
+            "negative_prompt": negative_prompt or SAFETY_NEGATIVE_PROMPT,
+            "image_size": {
+                "width": width,
+                "height": height
+            },
+            "num_images": 1
+        }
+
+        result = await self._call_fal_ai_with_retry(config["model"], params, page_number=page_number)
 
         return {
             "url": result.get("images", [{}])[0].get("url", ""),

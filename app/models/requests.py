@@ -324,3 +324,157 @@ class PreviewRegenerateRequest(BaseModel):
             raise ValueError(f'sidekick must be one of: {", ".join(allowed_sidekicks)}')
 
         return v
+
+
+class ExtendPreviewRequest(BaseModel):
+    """Request to extend a 2-page preview to a full 10-page book."""
+    photo_url: Optional[str] = Field(None, description="Optional photo URL for better hero portrait")
+    regenerate_story: bool = Field(
+        False,
+        description="If True, generate new 10-page story; if False (default), continue from preview"
+    )
+    target_pages: int = Field(10, ge=3, le=20, description="Total pages for the book (default: 10)")
+    occasion: Optional[str] = Field(None, max_length=100, description="Special occasion for the book")
+    special_details: Optional[str] = Field(None, max_length=500, description="Additional story details")
+
+    @field_validator('photo_url')
+    @classmethod
+    def validate_photo_url(cls, v: Optional[str]) -> Optional[str]:
+        """Validate photo URL format."""
+        if v is not None and not v.startswith(('http://', 'https://')):
+            raise ValueError('photo_url must start with http:// or https://')
+        return v
+
+
+# ============================================
+# EDUCATIONAL STORYBOOK REQUEST MODELS
+# ============================================
+
+class QuizAnswer(BaseModel):
+    """Answer to a quiz question."""
+    question_number: int
+    selected_answer: str  # "A", "B", "C", or "D"
+
+
+class LevelAssessmentRequest(BaseModel):
+    """Request to assess learner's level."""
+    topic: str = Field(..., min_length=1, max_length=200)
+    topic_category: str = Field(..., description="One of: stem, humanities, languages, arts, business, other")
+    self_reported_level: str = Field(..., description="One of: beginner, intermediate, advanced, expert")
+    quiz_answers: Optional[List[QuizAnswer]] = Field(None, description="Optional quiz answers for calibration")
+
+    @field_validator('topic_category')
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        """Validate topic category."""
+        from app.models.enums import TopicCategory
+        valid = [cat.value for cat in TopicCategory]
+        if v not in valid:
+            raise ValueError(f'topic_category must be one of: {", ".join(valid)}')
+        return v
+
+    @field_validator('self_reported_level')
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        """Validate learning level."""
+        from app.models.enums import LearningLevel
+        valid = [level.value for level in LearningLevel]
+        if v not in valid:
+            raise ValueError(f'self_reported_level must be one of: {", ".join(valid)}')
+        return v
+
+
+class CreateEducationalSeriesRequest(BaseModel):
+    """Request to create a new educational series."""
+    topic: str = Field(..., min_length=1, max_length=200, description="Topic to learn")
+    topic_slug: str = Field(..., min_length=1, max_length=200, description="URL-safe topic identifier")
+    topic_category: str = Field(..., description="Category of the topic")
+    learner_name: str = Field(..., min_length=1, max_length=100, description="Learner's name")
+    learner_level: str = Field(..., description="Proficiency level")
+    age_band: str = Field(..., description="Age group: child, teen, or adult")
+    art_style: str = Field(default="cartoon", description="Art style for illustrations")
+    target_chapters: int = Field(default=5, ge=3, le=20, description="Number of chapters")
+    
+    # Optional character customization
+    learner_gender: Optional[str] = Field(None, description="Gender for character visualization")
+    skin_tone: Optional[str] = None
+    hair_color: Optional[str] = None
+    hair_style: Optional[str] = None
+    
+    include_quiz_between_chapters: bool = Field(default=False, description="Include quizzes after each chapter")
+    learner_profile_id: Optional[str] = Field(None, description="Reference to existing learner profile")
+
+    @field_validator('topic_category')
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        """Validate topic category."""
+        from app.models.enums import TopicCategory
+        valid = [cat.value for cat in TopicCategory]
+        if v not in valid:
+            raise ValueError(f'topic_category must be one of: {", ".join(valid)}')
+        return v
+
+    @field_validator('learner_level')
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        """Validate learning level."""
+        from app.models.enums import LearningLevel
+        valid = [level.value for level in LearningLevel]
+        if v not in valid:
+            raise ValueError(f'learner_level must be one of: {", ".join(valid)}')
+        return v
+
+    @field_validator('age_band')
+    @classmethod
+    def validate_age_band(cls, v: str) -> str:
+        """Validate age band."""
+        allowed = ['child', 'teen', 'adult']
+        if v not in allowed:
+            raise ValueError(f'age_band must be one of: {", ".join(allowed)}')
+        return v
+
+
+class GenerateChapterRequest(BaseModel):
+    """Request to generate a chapter in a series."""
+    custom_focus: Optional[str] = Field(None, max_length=500, description="Optional custom focus for this chapter")
+    regenerate: bool = Field(default=False, description="If True, regenerate this chapter")
+
+
+class EducationalPreviewRequest(BaseModel):
+    """Request for quick educational preview."""
+    topic: str = Field(..., min_length=1, max_length=200)
+    topic_category: str
+    learner_name: str = Field(..., min_length=1, max_length=100)
+    learner_level: str
+    age_band: str
+    art_style: str = Field(default="cartoon")
+    session_id: str = Field(..., description="Session tracking ID")
+
+    @field_validator('topic_category')
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        """Validate topic category."""
+        from app.models.enums import TopicCategory
+        valid = [cat.value for cat in TopicCategory]
+        if v not in valid:
+            raise ValueError(f'topic_category must be one of: {", ".join(valid)}')
+        return v
+
+    @field_validator('learner_level')
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        """Validate learning level."""
+        from app.models.enums import LearningLevel
+        valid = [level.value for level in LearningLevel]
+        if v not in valid:
+            raise ValueError(f'learner_level must be one of: {", ".join(valid)}')
+        return v
+
+    @field_validator('age_band')
+    @classmethod
+    def validate_age_band(cls, v: str) -> str:
+        """Validate age band."""
+        allowed = ['child', 'teen', 'adult']
+        if v not in allowed:
+            raise ValueError(f'age_band must be one of: {", ".join(allowed)}')
+        return v

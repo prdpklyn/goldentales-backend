@@ -18,6 +18,24 @@
 
 ---
 
+### Issue 1b: Missing page_number Parameter
+**Error**: `ImageGenerator._call_fal_ai_with_retry() missing 1 required positional argument: 'page_number'`
+
+**Root Cause**:
+- The `_call_fal_ai_with_retry` method signature requires 3 parameters: `model`, `params`, and `page_number`
+- The new preview methods were only passing 2 parameters (model and params)
+
+**Fix Applied** (`app/services/image_generator.py`):
+- Line 639: Added `page_number=0` parameter to `generate_cover`
+- Line 717: Added `page_number=0` parameter to `generate_hero_portrait`
+- Line 780: Added `page_number=0` parameter to `generate_hero_portrait_with_reference`
+
+**Rationale**: Cover and hero portrait are not actual story pages, so `page_number=0` is used to indicate they are special images.
+
+**Files Modified**: `app/services/image_generator.py`
+
+---
+
 ### Issue 2: Missing Attribute in ExternalServiceException
 **Error**: `'ExternalServiceException' object has no attribute 'is_transient'`
 
@@ -72,10 +90,34 @@ POST /api/v2/photo/likeness-variants    - Generate likeness variants
 
 ---
 
+---
+
+### Issue 3: Missing generate_with_prompt Method
+**Error**: `'ImageGenerator' object has no attribute 'generate_with_prompt'`
+
+**Root Cause**:
+- User updated `preview_service.py` to generate Pixar-style images with custom prompts
+- The code called `image_generator.generate_with_prompt()` which didn't exist
+- ImageGenerator only had specific methods: `generate_cover`, `generate_hero_portrait`, `generate_illustration`
+
+**Fix Applied** (`app/services/image_generator.py`):
+- Added new method `generate_with_prompt()` (lines 787-834)
+- This method accepts a custom prompt string and generates an image
+- Supports all the parameters needed: `prompt`, `negative_prompt`, `width`, `height`, `quality`, `page_number`
+- Uses the same `_call_fal_ai_with_retry` infrastructure for consistency
+
+**Rationale**: The Pixar-style preview flow builds custom prompts and needs a flexible method to generate images from those prompts directly.
+
+**Files Modified**: `app/services/image_generator.py`
+
+---
+
 ## Files Changed
 
 1. **app/services/image_generator.py**
    - Fixed 3 method name calls from `_call_fal_with_retry` to `_call_fal_ai_with_retry`
+   - Added `page_number=0` parameter to 3 method calls
+   - Added new `generate_with_prompt()` method (50+ lines)
 
 2. **app/utils/exceptions.py**
    - Added `is_transient` and `service_name` as instance attributes to `ExternalServiceException`
@@ -90,9 +132,6 @@ POST /api/v2/photo/likeness-variants    - Generate likeness variants
 
 5. **pytest.ini**
    - Created pytest configuration
-
-6. **test_e2e_preview.py**
-   - Created end-to-end integration test
 
 ---
 

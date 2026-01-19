@@ -256,3 +256,166 @@ class PreviewRegenerateResponse(BaseModel):
     hero_portrait: HeroPortraitResponse
     spreads: List[RegenerateSpreadResponse]
     metadata: RegenerateMetadataResponse
+
+
+class BookPageResponse(BaseModel):
+    """A single page in the full book."""
+    page_number: int
+    text: str
+    image_url: str
+    scene_description: str
+    character_action: str
+    mood: str
+
+
+class ExtendPreviewResponse(BaseModel):
+    """Response from extending a preview to a full book."""
+    preview_id: str
+    book_id: str
+    title: str
+    child_name: str
+    theme: str
+    cover_url: str
+    hero_portrait_url: str
+    pages: List[BookPageResponse]
+    total_pages: int
+    character_bible: Dict[str, Any]
+    art_style: str
+    generation_time_ms: int
+    was_continued: bool  # True if story was continued from preview, False if regenerated
+
+
+# ============================================
+# EDUCATIONAL STORYBOOK RESPONSE MODELS
+# ============================================
+
+class QuizQuestionOption(BaseModel):
+    """Quiz question option."""
+    id: str  # "A", "B", "C", "D"
+    text: str
+
+
+class QuizQuestion(BaseModel):
+    """A single quiz question."""
+    question_number: int
+    question_text: str
+    options: List[QuizQuestionOption]
+    correct_answer: Optional[str] = None  # Only included in results
+    explanation: Optional[str] = None
+    difficulty: str  # "easy", "medium", "hard"
+
+
+class QuizResponse(BaseModel):
+    """Quiz generation response."""
+    quiz_id: str
+    topic: str
+    topic_category: str
+    questions: List[QuizQuestion]
+    num_questions: int
+
+
+class QuizBreakdown(BaseModel):
+    """Quiz score breakdown by difficulty."""
+    easy: Dict[str, int]
+    medium: Dict[str, int]
+    hard: Dict[str, int]
+
+
+class LevelAssessmentResponse(BaseModel):
+    """Level assessment result."""
+    calibrated_level: str
+    confidence_score: float
+    self_reported_level: str
+    quiz_taken: bool
+    quiz_score: Optional[float] = None
+    quiz_breakdown: Optional[QuizBreakdown] = None
+    explanation: str
+
+
+class ConceptCharacterResponse(BaseModel):
+    """Concept character description."""
+    name: str
+    character_type: str
+    concept_name: str
+    visual_form: str
+    primary_colors: List[str]
+    distinctive_features: str
+    personality_traits: Optional[str] = None
+    role_in_story: Optional[str] = None
+
+
+class SeriesResponse(BaseModel):
+    """Educational series response."""
+    series_id: str
+    title: str
+    topic: str
+    topic_category: str
+    learner_name: str
+    learner_level: str
+    age_band: str
+    art_style: str
+    target_chapters: int
+    current_chapter: int
+    concept_progression: List[List[str]]
+    completed_chapters: List[str]
+    status: str
+    created_at: str
+
+
+class ChapterPageResponse(BaseModel):
+    """A single page in an educational chapter."""
+    page_number: int
+    text: str
+    image_url: Optional[str] = None
+    scene_description: str
+    teaching_focus: str
+    concept_characters_in_scene: List[str] = []
+    mood: str
+    pedagogical_type: str  # "setup", "concept", "application", etc.
+
+
+class ChapterResponse(BaseModel):
+    """Educational chapter response."""
+    chapter_id: str
+    series_id: str
+    chapter_number: int
+    title: str
+    concepts_covered: List[str]
+    cover_url: Optional[str] = None
+    pages: List[ChapterPageResponse]
+    total_pages: int
+    quiz_questions: Optional[List[QuizQuestion]] = None
+    generation_time_ms: int
+    created_at: str
+
+
+class NextChapterPlanResponse(BaseModel):
+    """Next chapter planning information."""
+    series_id: str
+    chapter_number: int
+    total_chapters: int
+    concepts_to_cover: List[str]
+    previous_concepts: List[str]
+    ready_to_generate: bool
+
+
+class EducationalPreviewResponse(BaseModel):
+    """Quick educational preview response."""
+    preview_id: str
+    topic: str
+    title: str
+    cover: CoverImageResponse
+    concept_characters: List[ConceptCharacterResponse]
+    sample_pages: List[ChapterPageResponse]
+    metadata: Dict[str, Any]
+
+
+class TopicInfoResponse(BaseModel):
+    """Topic information response."""
+    topic_name: str
+    topic_slug: str
+    topic_category: str
+    description: str
+    suggested_chapters: int
+    key_concepts: List[str]
+    difficulty_range: List[str]  # ["beginner", "intermediate", "advanced"]
