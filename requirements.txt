@@ -12,7 +12,7 @@ replicate==0.22.0
 # PDF Generation
 reportlab==4.0.8
 Pillow>=10.2.0
-weasyprint==60.2
+weasyprint==68.0
 
 # Database and Caching
 redis==5.0.1
